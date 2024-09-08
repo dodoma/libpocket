@@ -7,6 +7,7 @@ project(libmoc_library VERSION 0.0.1 LANGUAGES C)
 
 add_library(libmoc SHARED
   "libmoc.c"
+  "pocket.c"
   "mnet.c"
   "mfile.c"
 )

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:libmoc/libmoc.dart' as libmoc;
+import 'package:path_provider/path_provider.dart';
+
 
 void main() {
   runApp(const MyApp());
@@ -20,6 +22,7 @@ class _MyAppState extends State<MyApp> {
   late Future<String> mocstring;
   String asyncString = "aaaaa";
   String filestring = libmoc.fileTest();
+
 
   @override
   void initState() {
@@ -52,13 +55,15 @@ class _MyAppState extends State<MyApp> {
                 spacerSmall,
                 Text(filestring),
                 spacerSmall,
+                Text(asyncString),
                 IconButton(
                   icon: const Icon(Icons.refresh),
                   onPressed: () async {
                     //final stringa = await libmoc.libmocDiscover();
-                    String stringa = await libmoc.mocDiscover();
+                    //String stringa = await libmoc.mocDiscover();
+                    final directory = await getApplicationDocumentsDirectory();
                     setState(() {
-                      asyncString = stringa;
+                      asyncString = directory.path;
                     });
                   },
                 ),
