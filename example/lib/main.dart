@@ -19,6 +19,7 @@ class _MyAppState extends State<MyApp> {
   //late Future<int> sumAsyncResult;
   late Future<String> mocstring;
   String asyncString = "aaaaa";
+  String filestring = libmoc.fileTest();
 
   @override
   void initState() {
@@ -49,7 +50,7 @@ class _MyAppState extends State<MyApp> {
                   textAlign: TextAlign.center,
                 ),
                 spacerSmall,
-                Text(asyncString),
+                Text(filestring),
                 spacerSmall,
                 IconButton(
                   icon: const Icon(Icons.refresh),

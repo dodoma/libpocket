@@ -13,6 +13,7 @@ import 'libmoc_bindings_generated.dart';
 /// They will block the Dart execution while running the native function, so
 /// only do this for native functions which are guaranteed to be short-lived.
 int sum(int a, int b) => _bindings.sum(a, b);
+String fileTest() => _bindings.mfile_test().cast<Utf8>().toDartString();
 
 
 /// A longer lived native function, which occupies the thread calling it.

@@ -8,11 +8,13 @@ project(libmoc_library VERSION 0.0.1 LANGUAGES C)
 add_library(libmoc SHARED
   "libmoc.c"
   "mnet.c"
+  "mfile.c"
 )
 
 set(MOC_PUBLIC_HEADERS
     "libmoc.h"
     "mnet.h"
+    "mfile.h"
 )
 
 set_target_properties(libmoc PROPERTIES

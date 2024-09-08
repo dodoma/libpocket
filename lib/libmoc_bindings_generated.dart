@@ -15,17 +15,17 @@ import 'dart:ffi' as ffi;
 class LibmocBindings {
   /// Holds the symbol lookup function.
   final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
-      _lookup;
+  _lookup;
 
   /// The symbols are looked up in [dynamicLibrary].
   LibmocBindings(ffi.DynamicLibrary dynamicLibrary)
-      : _lookup = dynamicLibrary.lookup;
+  : _lookup = dynamicLibrary.lookup;
 
   /// The symbols are looked up with [lookup].
   LibmocBindings.fromLookup(
-      ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
-          lookup)
-      : _lookup = lookup;
+    ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
+    lookup)
+  : _lookup = lookup;
 
   /// A very short-lived native function.
   ///
@@ -43,7 +43,7 @@ class LibmocBindings {
   }
 
   late final _sumPtr =
-      _lookup<ffi.NativeFunction<ffi.Int Function(ffi.Int, ffi.Int)>>('sum');
+  _lookup<ffi.NativeFunction<ffi.Int Function(ffi.Int, ffi.Int)>>('sum');
   late final _sum = _sumPtr.asFunction<int Function(int, int)>();
 
   /// A longer lived native function, which occupies the thread calling it.
@@ -61,33 +61,33 @@ class LibmocBindings {
     );
   }
   late final _sum_long_runningPtr =
-      _lookup<ffi.NativeFunction<ffi.Int Function(ffi.Int, ffi.Int)>>(
-          'sum_long_running');
+  _lookup<ffi.NativeFunction<ffi.Int Function(ffi.Int, ffi.Int)>>(
+    'sum_long_running');
   late final _sum_long_running =
-      _sum_long_runningPtr.asFunction<int Function(int, int)>();
+  _sum_long_runningPtr.asFunction<int Function(int, int)>();
 
 
+  // discover
   ffi.Pointer<ffi.Int8> mnet_discover(
   ) {
     return _mnet_discover (
     );
   }
   late final _mnet_discoverPtr =
-      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Int8> Function()>>(
-          'mnet_discover');
+  _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Int8> Function()>>(
+    'mnet_discover');
   late final _mnet_discover =
-      _mnet_discoverPtr.asFunction<ffi.Pointer<ffi.Int8> Function()>();
+  _mnet_discoverPtr.asFunction<ffi.Pointer<ffi.Int8> Function()>();
 
-
-  ffi.Pointer<ffi.Int8> mnet_discover2(
+  // file_test
+  ffi.Pointer<ffi.Int8> mfile_test(
   ) {
-    return _mnet_discover2 (
+    return _mfile_test (
     );
   }
-  late final _mnet_discover2Ptr =
-      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Int8> Function()>>(
-          'mnet_discover2');
-  late final _mnet_discover2 =
-      _mnet_discover2Ptr.asFunction<ffi.Pointer<ffi.Int8> Function()>();
-
+  late final _mfile_testPtr =
+  _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Int8> Function()>>(
+    'mfile_test');
+  late final _mfile_test =
+  _mfile_testPtr.asFunction<ffi.Pointer<ffi.Int8> Function()>();
 }

@@ -58,13 +58,6 @@ char* mnet_discover()
     return "rcvbuf";
 }
 
-char* mnet_discover2()
-{
-    sleep(3);
-
-    return "HAHAHAHA";
-}
-
 #ifdef EXECUTEABLE
 int main(int argc, char *argv[])
 {

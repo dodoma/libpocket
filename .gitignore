@@ -3,12 +3,14 @@
 *.log
 *.pyc
 *.swp
+*.o
 .DS_Store
 .atom/
 .buildlog/
 .history
 .svn/
 migrate_working_dir/
+src/runner
 
 # IntelliJ related
 *.iml
