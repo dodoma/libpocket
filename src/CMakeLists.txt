@@ -10,12 +10,14 @@ add_library(libmoc SHARED
   "pocket.c"
   "mnet.c"
   "mfile.c"
+  "packet.c"
 )
 
 set(MOC_PUBLIC_HEADERS
     "libmoc.h"
     "mnet.h"
     "mfile.h"
+    "packet.h"
 )
 
 set_target_properties(libmoc PROPERTIES

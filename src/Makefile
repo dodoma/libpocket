@@ -1,11 +1,11 @@
 INCS =
-LIBS =
+LIBS = -lpthread
 
 CFLAGS = -g -DEXECUTEABLE
 
 all: runner
 
-runner: mnet.o
+runner: mnet.o packet.o timer.o client.o pocket.o
 	gcc $(CFLAGS) $^ -o $@ $(LIBS)
 
 %.o:%.c

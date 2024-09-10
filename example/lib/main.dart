@@ -21,7 +21,7 @@ class _MyAppState extends State<MyApp> {
   //late Future<int> sumAsyncResult;
   late Future<String> mocstring;
   String asyncString = "aaaaa";
-  String filestring = libmoc.fileTest();
+  //String filestring = libmoc.fileTest();
 
 
   @override
@@ -29,7 +29,7 @@ class _MyAppState extends State<MyApp> {
     super.initState();
     sumResult = libmoc.sum(1, 2);
     //sumAsyncResult = libmoc.sumAsync(3, 4);
-    mocstring = libmoc.mocDiscover();
+    mocstring = libmoc.mocDiscovery();
   }
 
   @override
@@ -48,12 +48,12 @@ class _MyAppState extends State<MyApp> {
               children: [
                 const Text(
                   'This calls a native function through FFI that is shipped as source in the package. '
-                  'The native code is built as part of the Flutter Runner build.',
+                  'The native codexx is built as part of the Flutter Runner build.',
                   style: textStyle,
                   textAlign: TextAlign.center,
                 ),
-                spacerSmall,
-                Text(filestring),
+                //spacerSmall,
+                //Text(filestring),
                 spacerSmall,
                 Text(asyncString),
                 IconButton(
@@ -62,8 +62,9 @@ class _MyAppState extends State<MyApp> {
                     //final stringa = await libmoc.libmocDiscover();
                     //String stringa = await libmoc.mocDiscover();
                     final directory = await getApplicationDocumentsDirectory();
+                    String filecontent = libmoc.fileTest(directory.path);
                     setState(() {
-                      asyncString = directory.path;
+                      asyncString = filecontent;
                     });
                   },
                 ),

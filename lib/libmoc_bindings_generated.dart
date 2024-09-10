@@ -67,27 +67,41 @@ class LibmocBindings {
   _sum_long_runningPtr.asFunction<int Function(int, int)>();
 
 
-  // discover
-  ffi.Pointer<ffi.Int8> mnet_discover(
+  // discovery
+  ffi.Pointer<ffi.Int8> mnet_discovery(
   ) {
-    return _mnet_discover (
+    return _mnet_discovery (
     );
   }
-  late final _mnet_discoverPtr =
+  late final _mnet_discoveryPtr =
   _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Int8> Function()>>(
-    'mnet_discover');
-  late final _mnet_discover =
-  _mnet_discoverPtr.asFunction<ffi.Pointer<ffi.Int8> Function()>();
+    'mnet_discovery');
+  late final _mnet_discovery =
+  _mnet_discoveryPtr.asFunction<ffi.Pointer<ffi.Int8> Function()>();
+
+  // discover2
+  ffi.Pointer<ffi.Int8> mnet_discover2(
+  ) {
+    return _mnet_discover2 (
+    );
+  }
+  late final _mnet_discover2Ptr =
+  _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Int8> Function()>>(
+    'mnet_discover2');
+  late final _mnet_discover2 =
+  _mnet_discover2Ptr.asFunction<ffi.Pointer<ffi.Int8> Function()>();
 
   // file_test
   ffi.Pointer<ffi.Int8> mfile_test(
+    ffi.Pointer<ffi.Int8> dirname
   ) {
     return _mfile_test (
+      dirname
     );
   }
   late final _mfile_testPtr =
-  _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Int8> Function()>>(
+  _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Int8> Function(ffi.Pointer<ffi.Int8>)>>(
     'mfile_test');
   late final _mfile_test =
-  _mfile_testPtr.asFunction<ffi.Pointer<ffi.Int8> Function()>();
+  _mfile_testPtr.asFunction<ffi.Pointer<ffi.Int8> Function(ffi.Pointer<ffi.Int8>)>();
 }

@@ -13,7 +13,7 @@ import 'libmoc_bindings_generated.dart';
 /// They will block the Dart execution while running the native function, so
 /// only do this for native functions which are guaranteed to be short-lived.
 int sum(int a, int b) => _bindings.sum(a, b);
-String fileTest() => _bindings.mfile_test().cast<Utf8>().toDartString();
+String fileTest(String dir) => _bindings.mfile_test(dir.toNativeUtf8().cast<Int8>()).cast<Utf8>().toDartString();
 
 
 /// A longer lived native function, which occupies the thread calling it.
@@ -38,7 +38,7 @@ Future<int> sumAsync(int a, int b) async {
   return completer.future;
 }
 
-Future<String> mocDiscover() async {
+Future<String> mocDiscovery() async {
   final SendPort helperIsolateSendPort = await _helperIsolateSendPort;
   final int requestId = _nextSumRequestId++;
   final _CoverRequest request = _CoverRequest(requestId);
@@ -153,7 +153,12 @@ Future<SendPort> _helperIsolateSendPort = () async {
           sendPort.send(response);
           return;
         } else if (data is _CoverRequest) {
-          final String result = _bindings.mnet_discover().cast<Utf8>().toDartString();
+          Pointer<Int8> resultPtr = _bindings.mnet_discovery();
+          String result = "";
+          if (resultPtr.address != nullptr.address) {
+            result = resultPtr.cast<Utf8>().toDartString();            
+          }
+          //final String result = _bindings.mnet_discover2().cast<Utf8>().toDartString();
           final _CoverResponse response = _CoverResponse(data.id, result);
           sendPort.send(response);
           return;

@@ -12,7 +12,12 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <stdbool.h>
 #include <errno.h>
+#include <pthread.h>
+
+#include <sys/timerfd.h>
+#include <fcntl.h>
 
 #if defined(ANDROID)
 #include <android/log.h>
@@ -29,5 +34,16 @@ void TINY_LOG(const char* fmt, ...);
         fprintf(stdout, "\n");                                          \
     } while(0)
 #endif  /* ANDROID */
+
+#define MSG_DUMP(pre, p, psize)                                 \
+    do {                                                        \
+        if ((ssize_t)(psize) > 0) {                             \
+            char zstra[(psize)*2+1];                            \
+            pocket_bin2hexstr((uint8_t*)(p), (psize), zstra);   \
+            TINY_LOG("%s%zu %s", pre, (size_t)(psize), zstra);  \
+        }                                                       \
+    } while (0)
+
+void pocket_bin2hexstr(uint8_t *hexin, unsigned int inlen, char *charout);
 
 #endif  /* __POCKET_H__ */

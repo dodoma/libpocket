@@ -11,6 +11,7 @@
 .svn/
 migrate_working_dir/
 src/runner
+tmp/
 
 # IntelliJ related
 *.iml
