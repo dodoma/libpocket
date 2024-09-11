@@ -39,40 +39,42 @@ typedef struct _msource_node {
     MSOURCE_POSITION pos;
 
     struct _msource_node *next;
-} MSOURCE_NODE;
+} msourceNode;
 
 /*
  * 启动网络监控线程
  * 调且仅能调用一次
  */
-bool mnet_start();
+bool mnetStart();
 
 /* 查找本地设备
  * 若无，持续等待
  * 若有，返回局域网内音源设备SN编号，并尝试与其建立链接
  * 若出错，返回NULL
  */
-char* mnet_discovery();
+char* mnetDiscovery();
 
 /*
  * 与 moc server 建立长连接，并保持心跳
  * 成功链接返回 true
  * 失败返回 false
  */
-bool mnet_moc_connect();
+bool mnetMocConnect();
 
 /*
  * 判断音源设备 sn 远程在线状态
  * 同步请求，数秒内返回，有超时判断
  */
-bool mnet_online_check(char *id);
+bool mnetOnlineCheck(char *id);
 
 /*
  * 随机播放歌曲
  * 仅本地链接时可调用
  */
-bool mnet_play_random(char *id);
+bool mnetPlayRandom(char *id);
 
-char* mnet_discover2();
+bool mnetWifiSet(char *id);
+
+char* mnetDiscover2();
 
 #endif  /* __MNET_H__ */

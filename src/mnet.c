@@ -9,26 +9,36 @@
 time_t g_ctime, g_starton, g_elapsed;
 
 pthread_t m_worker;
-MSOURCE_NODE *m_sources = NULL;
+msourceNode *m_sources = NULL;
 
+/*
+ * 争取做到 moc server 与 音源 一套心跳维护逻辑
+ */
 static bool _keep_heartbeat(void *data)
 {
-    MSOURCE_NODE *item = (MSOURCE_NODE*)data;
+    msourceNode *item = (msourceNode*)data;
 
     TINY_LOG("keep heartbeat");
 
     uint8_t sendbuf[256] = {0};
     size_t sendlen = packetPINGFill(sendbuf, sizeof(sendbuf));
 
+    if (item->contrl.dropped) {
+        TINY_LOG("connection lost on recv");
+    }
+    if (item->binary.dropped) {
+        TINY_LOG("connection lost on recv");
+    }
+
     if (g_ctime > item->contrl.pong && g_ctime - item->contrl.pong > HEARTBEAT_TIMEOUT) {
-        TINY_LOG("connection lost %d", item->contrl.fd);
+        TINY_LOG("connection lost on timeout %d", item->contrl.fd);
         /* TODO callback */
     } else {
         send(item->contrl.fd, sendbuf, sendlen, MSG_NOSIGNAL);
     }
 
     if (g_ctime > item->binary.pong && g_ctime - item->binary.pong > HEARTBEAT_TIMEOUT) {
-        TINY_LOG("connection lost %d", item->binary.fd);
+        TINY_LOG("connection lost on timeout %d", item->binary.fd);
         /* TODO callback */
     } else {
         send(item->binary.fd, sendbuf, sendlen, MSG_NOSIGNAL);
@@ -82,7 +92,7 @@ static void* el_routine(void *arg)
         maxfd = 0;
         FD_ZERO(&readset);
 
-        MSOURCE_NODE *item = m_sources;
+        msourceNode *item = m_sources;
         while (item) {
             if (item->contrl.fd > maxfd) maxfd = item->contrl.fd;
             if (item->binary.fd > maxfd) maxfd = item->binary.fd;
@@ -116,7 +126,7 @@ static void* el_routine(void *arg)
     return NULL;
 }
 
-bool mnet_start()
+bool mnetStart()
 {
     g_ctime = time(NULL);
     g_starton = g_ctime;
@@ -128,8 +138,9 @@ bool mnet_start()
         return (ret);                           \
     } while (0)
 
-    MSOURCE_NODE *item = calloc(1, sizeof(MSOURCE_NODE));
-    memset(item, 0x0, sizeof(MSOURCE_NODE));
+    /* timer source */
+    msourceNode *item = calloc(1, sizeof(msourceNode));
+    memset(item, 0x0, sizeof(msourceNode));
     item->ip = NULL;
     item->contrl.fd = -1;
     item->binary.fd = -1;
@@ -182,8 +193,8 @@ static bool _onbroadcast(char cpuid[LEN_CPUID], char ip[INET_ADDRSTRLEN],
         return (ret);                                       \
     } while (0)
 
-    MSOURCE_NODE *item = calloc(1, sizeof(MSOURCE_NODE));
-    memset(item, 0x0, sizeof(MSOURCE_NODE));
+    msourceNode *item = calloc(1, sizeof(msourceNode));
+    memset(item, 0x0, sizeof(msourceNode));
 
     memcpy(item->id, cpuid, LEN_CPUID);
     item->ip = strdup(ip);
@@ -272,7 +283,7 @@ static bool _onbroadcast(char cpuid[LEN_CPUID], char ip[INET_ADDRSTRLEN],
     return true;
 }
 
-char* mnet_discovery()
+char* mnetDiscovery()
 {
     int fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (fd < 0) {
@@ -298,6 +309,8 @@ char* mnet_discovery()
         TINY_LOG("bind failure %s", strerror(errno));
         return NULL;
     }
+
+    TINY_LOG("discovery music source...");
 
     uint8_t rcvbuf[256];
 #ifdef ANDROID
@@ -340,8 +353,18 @@ char* mnet_discovery()
     }
 }
 
+/*
+ * ============ business ============
+ */
+bool mnetWifiSet(char *id)
+{
+    if (!id) return false;
 
-char* mnet_discover2()
+    msourceNode *item = NULL;
+}
+
+
+char* mnetDiscover2()
 {
     sleep(3);
     //return "imdiscover";
@@ -353,9 +376,9 @@ char* mnet_discover2()
 int main(int argc, char *argv[])
 {
     clientInit();
-    mnet_start();
+    mnetStart();
 
-    char *id = mnet_discovery();
+    char *id = mnetDiscovery();
 
     TINY_LOG("%s", id);
 
