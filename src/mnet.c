@@ -1,3 +1,5 @@
+#include <reef.h>
+
 #include "global.h"
 #include "mnet.h"
 #include "packet.h"
@@ -83,6 +85,10 @@ static void _timer_handler(int fd)
  */
 static void* el_routine(void *arg)
 {
+    /*
+     * 由于 select 会持续返回套接字可写，用时加入writeset又显得过于复杂，
+     * 故，为避免不必要的资源开销，写操作不由 select 管理。
+     */
     fd_set readset;
     int maxfd, rv;
 
@@ -105,6 +111,11 @@ static void* el_routine(void *arg)
         struct timeval tv = {.tv_sec = 0, .tv_usec = 1000000};
         rv = select(maxfd + 1, &readset, NULL, NULL, &tv);
         //TINY_LOG("select return %d", rv);
+
+        if (rv == -1) {
+            TINY_LOG("select error %s", strerror(errno));
+            break;
+        } else if (rv == 0) continue;
 
         item = m_sources;
         while (item) {
@@ -201,14 +212,14 @@ static bool _onbroadcast(char cpuid[LEN_CPUID], char ip[INET_ADDRSTRLEN],
     item->contrl.fd = -1;
     item->contrl.port = port_contrl;
     item->contrl.pong = g_ctime;
-    item->contrl.buf = NULL;
+    item->contrl.bufrecv = NULL;
     item->contrl.dropped = false;
     item->contrl.complete = false;
 
     item->binary.fd = -1;
     item->binary.port = port_binary;
     item->binary.pong = g_ctime;
-    item->binary.buf = NULL;
+    item->binary.bufrecv = NULL;
     item->binary.dropped = false;
     item->binary.complete = false;
 
@@ -327,8 +338,8 @@ char* mnetDiscovery()
         TINY_LOG("received %d bytes data from %s %d", rv, ip, port);
 
         CommandPacket *packet = packetCommandGot(rcvbuf, rv);
-        if (packet->frame_type == FRAME_TYPE_MSG && packet->cmd_set == CMDSET_GENERAL) {
-            if (packet->cmd_id == CMD_BROADCAST) {
+        if (packet && packet->frame_type == FRAME_MSG) {
+            if (packet->command == CMD_BROADCAST) {
                 uint8_t *buf = packet->data;
 
                 int idlen = strlen((char*)buf);
@@ -353,14 +364,55 @@ char* mnetDiscovery()
     }
 }
 
+msourceNode* _source_find(msourceNode *nodes, char *id)
+{
+    msourceNode *node = nodes;
+    while (node) {
+        if (node->pos > MNET_ONLINE_TIMER && !strcmp(node->id, id)) return node;
+
+        node = node->next;
+    }
+
+    return NULL;
+}
+
 /*
  * ============ business ============
  */
-bool mnetWifiSet(char *id)
+bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name)
 {
     if (!id) return false;
 
-    msourceNode *item = NULL;
+    msourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    if (item->pos != MNET_ONLINE_LAN) {
+        TINY_LOG("set wifi only works on network LAN");
+        return false;
+    }
+
+    struct net_node *node = &item->contrl;
+
+    MDF *datanode;
+    mdf_init(&datanode);
+    mdf_set_value(datanode, "ap", ap);
+    mdf_set_value(datanode, "passwd", passwd);
+    mdf_set_value(datanode, "name", name);
+
+    CommandPacket *packet = packetCommandFill(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetDataFill(packet, FRAME_HARDWARE, CMD_WIFI_SET, datanode);
+    if (sendlen == 0) {
+        TINY_LOG("message too loooong");
+        mdf_destroy(&datanode);
+        return false;
+    }
+    packetCRCFill(packet);
+
+    SSEND(node->fd, node->bufsend, sendlen);
+
+    mdf_destroy(&datanode);
+
+    return true;
 }
 
 
@@ -381,6 +433,10 @@ int main(int argc, char *argv[])
     char *id = mnetDiscovery();
 
     TINY_LOG("%s", id);
+
+    sleep(20);
+
+    mnetWifiSet("a4204428f3063", "TPLINK_2323", "123123", "No.419");
 
     sleep(100);
 

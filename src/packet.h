@@ -5,7 +5,8 @@
 
 #define PACKET_SOF 0xAA         /* start of frame */
 #define LEN_IDIOT 2
-#define LEN_PREAMBLE 7
+#define LEN_PREAMBLE 9
+#define LEN_HEADER 13
 
 typedef enum {
     IDIOT_PING = 101,
@@ -13,21 +14,19 @@ typedef enum {
 } IDIOT_INDICATOR;
 
 typedef enum {
-    FRAME_TYPE_CMD = 0,
-    FRAME_TYPE_ACK,
-    FRAME_TYPE_MSG
+    FRAME_MSG = 0,         /* 硬解消息 */
+    FRAME_CMD,             /* 硬解命令 */
+    FRAME_ACK,
+    FRAME_HARDWARE,        /* 音源控制相关 */
 } FRAME_TYPE;
 
 typedef enum {
-    CMDSET_GENERAL = 0,
-    CMDSET_CONTROL,
-    CMDSET_FILE
-} COMMAND_SET;
+    CMD_BROADCAST = 0,
+} COMMAND_MSG;
 
 typedef enum {
-    CMD_BROADCAST = 0,
-    CMD_HEARTBEAT,
-} COMMAND_ID;
+    CMD_WIFI_SET = 0,
+} COMMAND_HDARDWAR;
 
 #pragma pack(1)
 typedef struct {
@@ -38,13 +37,12 @@ typedef struct {
 typedef struct {
     uint8_t  sof;
     uint8_t  idiot;             /* idiot [0x0 ~ 0x64] means CommandPacket, as version useage */
-    uint16_t length;
+    uint32_t length;
     uint8_t  frame_type;
     uint16_t seqnum;
     uint16_t preamble_crc;
 
-    uint8_t cmd_set;
-    uint8_t cmd_id;
+    uint16_t command;
     uint8_t data[1];
 } CommandPacket;
 #pragma pack()
@@ -55,6 +53,7 @@ size_t packetPONGFill(uint8_t *buf, size_t buflen);
 CommandPacket* packetCommandFill(uint8_t *buf, size_t buflen);
 size_t packetBroadcastFill(CommandPacket *packet,
                            char *cpuid, uint16_t port_contrl, uint16_t port_binary);
+size_t packetDataFill(CommandPacket *packet, FRAME_TYPE type, uint16_t cmd, MDF *datanode); /* -_-! */
 bool packetCRCFill(CommandPacket *packet);
 
 IdiotPacket* packetIdiotGot(uint8_t *buf, size_t len);

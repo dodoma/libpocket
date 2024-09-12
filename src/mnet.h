@@ -8,15 +8,16 @@
  */
 
 #define LEN_CPUID 14
-#define PORT_BROADCAST_DST 4102
+#define LEN_PACKET_NORMAL 1024
 #define CONTRL_PACKET_MAX_LEN 10485760
+#define PORT_BROADCAST_DST 4102
 
 typedef enum {
     MNET_OFFLINE = 0,
+    MNET_ONLINE_TIMER,          /* 内部定时器使用 */
     MNET_ONLINE_LAN,
     MNET_ONLINE_WAN,
     MNET_ONLINE_MOC,
-    MNET_ONLINE_TIMER,          /* 内部定时器使用 */
 } MSOURCE_POSITION;
 
 struct net_node {
@@ -24,7 +25,8 @@ struct net_node {
     uint16_t port;
     time_t pong;
 
-    uint8_t *buf;
+    uint8_t *bufrecv;
+    uint8_t  bufsend[LEN_PACKET_NORMAL];
     bool dropped;
     bool complete;
 };
@@ -73,7 +75,8 @@ bool mnetOnlineCheck(char *id);
  */
 bool mnetPlayRandom(char *id);
 
-bool mnetWifiSet(char *id);
+bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name);
+
 
 char* mnetDiscover2();
 

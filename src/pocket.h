@@ -35,7 +35,7 @@ void TINY_LOG(const char* fmt, ...);
     } while(0)
 #endif  /* ANDROID */
 
-#define MSG_DUMP(pre, p, psize)                                 \
+#define MSG_LOG(pre, p, psize)                                  \
     do {                                                        \
         if ((ssize_t)(psize) > 0) {                             \
             char zstra[(psize)*2+1];                            \
@@ -43,6 +43,17 @@ void TINY_LOG(const char* fmt, ...);
             TINY_LOG("%s%zu %s", pre, (size_t)(psize), zstra);  \
         }                                                       \
     } while (0)
+
+/*
+ * 针对非阻塞套接字进行阻塞式发送（发送缓冲区满时持续阻塞）
+ * 返回情况：
+ * 1. true: 一次性成功发送 len 个字节
+ * 2. true: 阻塞至待缓冲区可用后一/多次成功发送 len 个字节
+ * 3. false: 套接字发送错误
+ * 4. false: 套接字关闭
+ * 4. false: 参数错误
+ */
+bool SSEND(int fd, uint8_t *buf, size_t len);
 
 void pocket_bin2hexstr(uint8_t *hexin, unsigned int inlen, char *charout);
 

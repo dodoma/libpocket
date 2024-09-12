@@ -1,3 +1,5 @@
+#include <reef.h>
+
 #include "global.h"
 #include "client.h"
 #include "packet.h"
@@ -44,12 +46,11 @@ void clientRecv(int sfd, struct net_node *client)
 {
     int rv;
 
-    if (client->buf == NULL) {
+    if (client->bufrecv == NULL) {
         memset(m_recvbuf, 0x0, CONTRL_PACKET_MAX_LEN);
 
         rv = recv(sfd, m_recvbuf, CONTRL_PACKET_MAX_LEN, 0);
-
-        MSG_DUMP("RECV: ", m_recvbuf, rv);
+        MSG_LOG("RECV: ", m_recvbuf, rv);
 
         if (rv < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             return;

@@ -10,6 +10,34 @@ void TINY_LOG(const char* fmt, ...)
 }
 #endif
 
+bool SSEND(int fd, uint8_t *buf, size_t len)
+{
+    ssize_t count = 0;
+    int rv;
+
+    if (fd <= 0 || !buf || len <= 0) return false;
+
+    while (count < len) {
+        rv = send(fd, buf + count, len - count, MSG_NOSIGNAL);
+        MSG_LOG("SEND: ", buf + count, rv);
+
+        if (rv == -1) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                continue;
+            else {
+                TINY_LOG("send failure %s", strerror(errno));
+                return false;
+            }
+        } else if (rv == 0) {
+            return false;
+        } else {
+            count += rv;
+        }
+    }
+
+    return true;
+}
+
 /*
  * use < 10 judgement, or, you can use array ['0', '1', ..., 'e', 'f']
  */

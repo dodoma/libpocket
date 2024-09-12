@@ -1,5 +1,5 @@
-INCS =
-LIBS = -lpthread
+INCS = -I ~/code/reef/include
+LIBS = -L ~/code/reef/src/ -l reef -lpthread
 
 CFLAGS = -g -DEXECUTEABLE
 
