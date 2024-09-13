@@ -64,6 +64,9 @@ static bool _parse_recv(NetNode *client, uint8_t *recvbuf, size_t recvlen)
             //TINY_LOG("pong received");
             client->pong = g_ctime;
             break;
+        default:
+            TINY_LOG("unsupport idot packet %d", ipacket->idiot);
+            break;
         }
 
         if (recvlen > LEN_IDIOT) {
@@ -128,6 +131,7 @@ void clientRecv(int sfd, NetNode *client)
         }
     } else {
         rv = recv(sfd, client->bufrecv + client->recvlen, CONTRL_PACKET_MAX_LEN - client->recvlen, 0);
+        MSG_LOG("CRECV: ", client->bufrecv + client->recvlen, rv);
 
         if (rv < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             return;
