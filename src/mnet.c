@@ -5,9 +5,11 @@
 #include "mnet.h"
 #include "packet.h"
 #include "client.h"
+#include "server.h"
 
 #define HEARTBEAT_PERIOD 5
 #define HEARTBEAT_TIMEOUT 15
+#define RECONNECT_TIMEOUT 30
 
 time_t g_ctime, g_starton, g_elapsed;
 
@@ -27,26 +29,48 @@ static bool _keep_heartbeat(void *data)
     size_t sendlen = packetPINGFill(sendbuf, sizeof(sendbuf));
 
     if (!item->contrl.online) {
-        TINY_LOG("connection lost on recv");
+        /* 如果已经断连，仅尝试重连 */
+        if (g_ctime > item->contrl.pong && g_ctime - item->contrl.pong > RECONNECT_TIMEOUT) {
+            TINY_LOG("reconnect to %s", item->id);
+
+            item->contrl.pong = g_ctime;
+            serverConnect(&item->contrl);
+        }
+    } else {
+        /* 链接正常，进行心跳保持和通畅判断 */
+        if (g_ctime > item->contrl.pong && g_ctime - item->contrl.pong > HEARTBEAT_TIMEOUT) {
+            TINY_LOG("connection lost on timeout %d", item->contrl.fd);
+            /* 当然，遗失的心跳，也可能网络畅通，但服务器没回 PONG 包 */
+
+            item->contrl.online = false;
+            item->contrl.pong = g_ctime;
+
+            callbackOn(SEQ_CONNECTION_LOST, 0, false, item->id, NULL);
+        } else {
+            send(item->contrl.fd, sendbuf, sendlen, MSG_NOSIGNAL);
+            //MSG_LOG("SEND: ", sendbuf, sendlen);
+        }
     }
+
     if (!item->binary.online) {
-        TINY_LOG("connection lost on recv");
-    }
+        if (g_ctime > item->binary.pong && g_ctime - item->binary.pong > RECONNECT_TIMEOUT) {
+            //TINY_LOG("reconnect to %s", item->id);
 
-    if (g_ctime > item->contrl.pong && g_ctime - item->contrl.pong > HEARTBEAT_TIMEOUT) {
-        TINY_LOG("connection lost on timeout %d", item->contrl.fd);
-        /* TODO callback */
+            item->binary.pong = g_ctime;
+            //serverConnect(&item->binary);
+        }
     } else {
-        send(item->contrl.fd, sendbuf, sendlen, MSG_NOSIGNAL);
-        //MSG_LOG("SEND: ", sendbuf, sendlen);
-    }
+        if (g_ctime > item->binary.pong && g_ctime - item->binary.pong > HEARTBEAT_TIMEOUT) {
+            TINY_LOG("connection lost on timeout %d", item->binary.fd);
 
-    if (g_ctime > item->binary.pong && g_ctime - item->binary.pong > HEARTBEAT_TIMEOUT) {
-        TINY_LOG("connection lost on timeout %d", item->binary.fd);
-        /* TODO callback */
-    } else {
-        send(item->binary.fd, sendbuf, sendlen, MSG_NOSIGNAL);
-        //MSG_LOG("SEND: ", sendbuf, sendlen);
+            item->binary.online = false;
+            item->binary.pong = g_ctime;
+
+            callbackOn(SEQ_CONNECTION_LOST, 1, false, item->id, NULL);
+        } else {
+            send(item->binary.fd, sendbuf, sendlen, MSG_NOSIGNAL);
+            //MSG_LOG("SEND: ", sendbuf, sendlen);
+        }
     }
 
     return true;
@@ -135,8 +159,8 @@ static void* el_routine(void *arg)
                 if (FD_ISSET(item->contrl.fd, &readset)) {
                     clientRecv(item->contrl.fd, &item->contrl);
                 }
-                if (ISSET(item->binary.fd, &readset)) {
-                    //clientRecv(item->bianry.fd, &item->binary);
+                if (FD_ISSET(item->binary.fd, &readset)) {
+                    //clientRecv(item->binary.fd, &item->binary);
                 }
             }
 
@@ -204,8 +228,6 @@ static bool _onbroadcast(char cpuid[LEN_CPUID], char ip[INET_ADDRSTRLEN],
 
 #define RETURN(ret)                                         \
     do {                                                    \
-        if (item->contrl.fd > 0) close(item->contrl.fd);    \
-        if (item->binary.fd > 0) close(item->binary.fd);    \
         free(item);                                         \
         return (ret);                                       \
     } while (0)
@@ -216,94 +238,36 @@ static bool _onbroadcast(char cpuid[LEN_CPUID], char ip[INET_ADDRSTRLEN],
     memcpy(item->id, cpuid, LEN_CPUID);
     item->ip = strdup(ip);
     item->contrl.fd = -1;
+    item->contrl.online = false;
     item->contrl.port = port_contrl;
     item->contrl.pong = g_ctime;
     item->contrl.bufrecv = NULL;
     item->contrl.recvlen = 0;
+    item->contrl.upnode = item;
 
     item->binary.fd = -1;
+    item->binary.online = false;
     item->binary.port = port_binary;
     item->binary.pong = g_ctime;
     item->binary.bufrecv = NULL;
     item->binary.recvlen = 0;
+    item->binary.upnode = item;
 
     item->pos = MNET_ONLINE_LAN;
 
-    uint8_t sendbuf[256] = {0};
-    size_t sendlen = packetPINGFill(sendbuf, sizeof(sendbuf));
+    if (!serverConnect(&item->contrl)) RETURN(false);
 
-    /*
-     * contrl
-     */
-    item->contrl.fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (item->contrl.fd < 0) {
-        TINY_LOG("create socket failre");
-        RETURN(false);
-    }
-
-    int enable = 1;
-    setsockopt(item->contrl.fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
-
-    struct sockaddr_in othersa;
-    struct in_addr ia;
-    int rv = inet_pton(AF_INET, ip, &ia);
-    if (rv <= 0) {
-        TINY_LOG("pton failure %s", ip);
-        RETURN(false);
-    }
-    othersa.sin_family = AF_INET;
-    othersa.sin_addr.s_addr = ia.s_addr;
-    othersa.sin_port = htons(port_contrl);
-    rv = connect(item->contrl.fd, (struct sockaddr*)&othersa, sizeof(othersa));
-    if (rv < 0) {
-        TINY_LOG("connect failure %s %d", ip, port_contrl);
-        RETURN(false);
-    }
-
-    fcntl(item->contrl.fd, F_SETFL, fcntl(item->contrl.fd, F_GETFL) | O_NONBLOCK);
-
-    send(item->contrl.fd, sendbuf, sendlen, MSG_NOSIGNAL);
-    //MSG_LOG("SEND: ", sendbuf, sendlen);
-
-    /*
-     * binary
-     */
-    item->binary.fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (item->binary.fd < 0) {
-        TINY_LOG("create socket failre");
-        RETURN(false);
-    }
-
-    setsockopt(item->binary.fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
-
-    othersa.sin_family = AF_INET;
-    othersa.sin_addr.s_addr = ia.s_addr;
-    othersa.sin_port = htons(port_binary);
-    rv = connect(item->binary.fd, (struct sockaddr*)&othersa, sizeof(othersa));
-    if (rv < 0) {
-        TINY_LOG("connect failure %s %d", ip, port_binary);
-        RETURN(false);
-    }
-
-    fcntl(item->binary.fd, F_SETFL, fcntl(item->binary.fd, F_GETFL) | O_NONBLOCK);
-
-    send(item->binary.fd, sendbuf, sendlen, MSG_NOSIGNAL);
-    //MSG_LOG("SEND: ", sendbuf, sendlen);
+    if (!serverConnect(&item->binary)) RETURN(false);
 
     g_timers = timerAdd(g_timers, HEARTBEAT_PERIOD, true, item, _keep_heartbeat);
 
-#undef RETURN
-
     TINY_LOG("%s contrl fd %d, binary fd %d", cpuid, item->contrl.fd, item->binary.fd);
-
-    /* 一切完成后，再加入 select 队列 */
-    item->contrl.online = true;
-    item->binary.online = true;
 
     item->next = m_sources;
     m_sources = item;
 
     return true;
+#undef RETURN
 }
 
 char* mnetDiscovery()

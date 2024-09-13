@@ -15,7 +15,10 @@ bool SSEND(int fd, uint8_t *buf, size_t len)
     ssize_t count = 0;
     int rv;
 
-    if (fd <= 0 || !buf || len <= 0) return false;
+    if (fd <= 0 || !buf || len <= 0) {
+        TINY_LOG("parameter error");
+        return false;
+    }
 
     while (count < len) {
         rv = send(fd, buf + count, len - count, MSG_NOSIGNAL);

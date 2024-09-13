@@ -1,6 +1,7 @@
 #include <reef.h>
 
 #include "pocket.h"
+#include "packet.h"
 #include "callback.h"
 
 CallbackManager *m_callback = NULL;
@@ -47,7 +48,8 @@ static void* _do(void *arg)
                 if (centry->seqnum == qentry->seqnum) {
                     centry->callback(qentry->success, qentry->errmsg, qentry->nodein);
 
-                    mdlist_eject(dlist, callbackEntryFree);
+                    if (centry->seqnum >= SEQ_USER_START) mdlist_eject(dlist, callbackEntryFree);
+
                     queueEntryFree(qentry);
                     goto done;
                 }
@@ -74,7 +76,7 @@ void queueEntryFree(void *p)
 
     QueueEntry *entry = (QueueEntry*)p;
 
-    if (entry->errmsg) free(entry->errmsg);
+    /* errmsg 可能固定赋值，此处不负责释放，用户自行看管 */
     mdf_destroy(&entry->nodein);
     free(entry);
 }
@@ -143,6 +145,16 @@ void queueFree(QueueManager *queue)
     mos_free(queue);
 }
 
+static void _server_closed(bool success, char *errmsg, MDF *nodein)
+{
+    TINY_LOG("server %s closed", errmsg);
+}
+
+static void _connection_lost(bool success, char *errmsg, MDF *nodein)
+{
+    TINY_LOG("lost connection with %s", errmsg);
+}
+
 void callbackStart()
 {
     if (!m_callback) {
@@ -151,6 +163,9 @@ void callbackStart()
         m_callback->queue = queueCreate();
         m_callback->callbacks = NULL;
         pthread_create(&m_callback->worker, NULL, _do, m_callback);
+
+        callbackRegist(SEQ_SERVER_CLOSED, 0, _server_closed);
+        callbackRegist(SEQ_CONNECTION_LOST, 0, _connection_lost);
     }
 }
 

@@ -30,6 +30,8 @@ typedef struct {
     uint8_t *bufrecv;
     uint8_t bufsend[LEN_PACKET_NORMAL];
     size_t recvlen;
+
+    struct _msource_node *upnode;
 } NetNode;
 
 typedef struct _msource_node {

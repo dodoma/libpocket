@@ -23,11 +23,13 @@ static bool _parse_packet(NetNode *client, CommandPacket *packet)
             int msglen = strlen((char*)buf);
             if (packet->length != LEN_HEADER + 1 + msglen + 1 + 4) {
                 TINY_LOG("ack msg error %d %d", packet->length, msglen);
-                errmsg = strdup((char*)buf); /* errmsg freed on callback */
+                errmsg = strdup((char*)buf);
             }
         }
 
         callbackOn(packet->seqnum, packet->command, ok, errmsg, NULL);
+
+        if (errmsg) free(errmsg);
 
         break;
     }
@@ -152,4 +154,6 @@ void serverClosed(NetNode *client)
     shutdown(client->fd, SHUT_RDWR);
     close(client->fd);
     client->fd = -1;
+
+    callbackOn(SEQ_SERVER_CLOSED, 0, false, client->upnode->id, NULL);
 }
