@@ -1,5 +1,8 @@
 #include <reef.h>
 
+#include "pocket.h"
+#include "callback.h"
+#include "mnet.h"
 #include "packet.h"
 
 size_t packetPINGFill(uint8_t *buf, size_t buflen)
@@ -47,7 +50,7 @@ CommandPacket* packetCommandFill(uint8_t *buf, size_t buflen)
 }
 
 size_t packetBroadcastFill(CommandPacket *packet,
-                           char *cpuid, uint16_t port_contrl, uint16_t port_binary)
+                           const char *cpuid, uint16_t port_contrl, uint16_t port_binary)
 {
     if (!packet || !cpuid) return 0;
 
@@ -71,11 +74,36 @@ size_t packetBroadcastFill(CommandPacket *packet,
     return packetlen;
 }
 
+size_t packetACKFill(CommandPacket *packet, uint16_t seqnum, uint16_t command,
+                     bool success, const char *errmsg)
+{
+    if (!packet || (errmsg && strlen(errmsg) > LEN_PACKET_NORMAL - LEN_HEADER - 4)) return 0;
+
+    uint8_t *bufhead = (uint8_t*)packet;
+
+    packet->seqnum = seqnum & 0xFFFF;
+    packet->frame_type = FRAME_ACK;
+    packet->command = command;
+
+    uint8_t *buf = packet->data;
+    *buf = success; buf++;
+
+    if (errmsg) {
+        int msglen = strlen(errmsg);
+        memcpy(buf, errmsg, msglen);
+        buf += msglen;
+        *buf = 0x0; buf++;
+    }
+
+    size_t packetlen = buf - bufhead + 4;
+    packet->length = packetlen;
+
+    return packetlen;
+}
+
 size_t packetDataFill(CommandPacket *packet, FRAME_TYPE type, uint16_t command, MDF *datanode)
 {
     if (!packet || !datanode) return 0;
-
-    uint8_t *bufhead = (uint8_t*)packet;
 
     packet->frame_type = type;
     packet->command = command;

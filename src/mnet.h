@@ -8,7 +8,7 @@
  */
 
 #define LEN_CPUID 14
-#define LEN_PACKET_NORMAL 1024
+#define LEN_PACKET_NORMAL 512
 #define CONTRL_PACKET_MAX_LEN 10485760
 #define PORT_BROADCAST_DST 4102
 
@@ -20,28 +20,29 @@ typedef enum {
     MNET_ONLINE_MOC,
 } MSOURCE_POSITION;
 
-struct net_node {
+typedef struct {
     int fd;
     uint16_t port;
     time_t pong;
 
+    bool online;
+
     uint8_t *bufrecv;
-    uint8_t  bufsend[LEN_PACKET_NORMAL];
-    bool dropped;
-    bool complete;
-};
+    uint8_t bufsend[LEN_PACKET_NORMAL];
+    size_t recvlen;
+} NetNode;
 
 typedef struct _msource_node {
     char id[LEN_CPUID];
     char *ip;
 
-    struct net_node contrl;
-    struct net_node binary;
+    NetNode contrl;
+    NetNode binary;
 
     MSOURCE_POSITION pos;
 
     struct _msource_node *next;
-} msourceNode;
+} MsourceNode;
 
 /*
  * 启动网络监控线程
@@ -75,7 +76,7 @@ bool mnetOnlineCheck(char *id);
  */
 bool mnetPlayRandom(char *id);
 
-bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name);
+bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name, CONTRL_CALLBACK);
 
 
 char* mnetDiscover2();

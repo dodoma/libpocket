@@ -3,10 +3,12 @@
 
 TimerEntry *g_timers = NULL;
 
-TimerEntry* timerAdd(TimerEntry *entry, int timeout, void *data, bool (*callback)(void *data))
+TimerEntry* timerAdd(TimerEntry *entry, int timeout, bool rightnow,
+                     void *data, bool (*callback)(void *data))
 {
     TimerEntry *e = calloc(1, sizeof(TimerEntry));
     e->timeout = timeout;
+    e->right_now = rightnow;
     e->pause = false;
     e->data = data;
     e->callback = callback;

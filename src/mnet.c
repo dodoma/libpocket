@@ -1,6 +1,7 @@
 #include <reef.h>
 
 #include "global.h"
+#include "callback.h"
 #include "mnet.h"
 #include "packet.h"
 #include "client.h"
@@ -11,24 +12,24 @@
 time_t g_ctime, g_starton, g_elapsed;
 
 pthread_t m_worker;
-msourceNode *m_sources = NULL;
+MsourceNode *m_sources = NULL;
 
 /*
  * 争取做到 moc server 与 音源 一套心跳维护逻辑
  */
 static bool _keep_heartbeat(void *data)
 {
-    msourceNode *item = (msourceNode*)data;
+    MsourceNode *item = (MsourceNode*)data;
 
-    TINY_LOG("keep heartbeat");
+    TINY_LOG("on keep heartbeat timeout");
 
     uint8_t sendbuf[256] = {0};
     size_t sendlen = packetPINGFill(sendbuf, sizeof(sendbuf));
 
-    if (item->contrl.dropped) {
+    if (!item->contrl.online) {
         TINY_LOG("connection lost on recv");
     }
-    if (item->binary.dropped) {
+    if (!item->binary.online) {
         TINY_LOG("connection lost on recv");
     }
 
@@ -37,6 +38,7 @@ static bool _keep_heartbeat(void *data)
         /* TODO callback */
     } else {
         send(item->contrl.fd, sendbuf, sendlen, MSG_NOSIGNAL);
+        //MSG_LOG("SEND: ", sendbuf, sendlen);
     }
 
     if (g_ctime > item->binary.pong && g_ctime - item->binary.pong > HEARTBEAT_TIMEOUT) {
@@ -44,6 +46,7 @@ static bool _keep_heartbeat(void *data)
         /* TODO callback */
     } else {
         send(item->binary.fd, sendbuf, sendlen, MSG_NOSIGNAL);
+        //MSG_LOG("SEND: ", sendbuf, sendlen);
     }
 
     return true;
@@ -67,7 +70,8 @@ static void _timer_handler(int fd)
     while (t && t->timeout > 0) {
         n = t->next;
 
-        if (g_elapsed % t->timeout == 0 && !t->pause) {
+        if (t->right_now || (g_elapsed % t->timeout == 0 && !t->pause)) {
+            t->right_now = false;
             if (!t->callback(t->data)) {
                 if (p) p->next = n;
                 if (t == g_timers) g_timers = n;
@@ -98,17 +102,23 @@ static void* el_routine(void *arg)
         maxfd = 0;
         FD_ZERO(&readset);
 
-        msourceNode *item = m_sources;
+        MsourceNode *item = m_sources;
         while (item) {
             if (item->contrl.fd > maxfd) maxfd = item->contrl.fd;
             if (item->binary.fd > maxfd) maxfd = item->binary.fd;
-            if (!item->contrl.dropped && item->contrl.fd > 0) FD_SET(item->contrl.fd, &readset);
-            if (!item->binary.dropped && item->binary.fd > 0) FD_SET(item->binary.fd, &readset);
+            if (item->contrl.online && item->contrl.fd > 0) {
+                //TINY_LOG("add contrl fd %d", item->contrl.fd);
+                FD_SET(item->contrl.fd, &readset);
+            }
+            if (item->binary.online && item->binary.fd > 0) {
+                //TINY_LOG("add binary fd %d", item->binary.fd);
+                FD_SET(item->binary.fd, &readset);
+            }
 
             item = item->next;
         }
 
-        struct timeval tv = {.tv_sec = 0, .tv_usec = 1000000};
+        struct timeval tv = {.tv_sec = 0, .tv_usec = 100000};
         rv = select(maxfd + 1, &readset, NULL, NULL, &tv);
         //TINY_LOG("select return %d", rv);
 
@@ -122,10 +132,10 @@ static void* el_routine(void *arg)
             if (item->pos == MNET_ONLINE_TIMER) {
                 if (FD_ISSET(item->contrl.fd, &readset)) _timer_handler(item->contrl.fd);
             } else if (item->pos == MNET_ONLINE_LAN) {
-                if (!item->contrl.dropped && FD_ISSET(item->contrl.fd, &readset)) {
+                if (FD_ISSET(item->contrl.fd, &readset)) {
                     clientRecv(item->contrl.fd, &item->contrl);
                 }
-                if (!item->binary.dropped && FD_ISSET(item->binary.fd, &readset)) {
+                if (ISSET(item->binary.fd, &readset)) {
                     //clientRecv(item->bianry.fd, &item->binary);
                 }
             }
@@ -150,30 +160,26 @@ bool mnetStart()
     } while (0)
 
     /* timer source */
-    msourceNode *item = calloc(1, sizeof(msourceNode));
-    memset(item, 0x0, sizeof(msourceNode));
+    MsourceNode *item = calloc(1, sizeof(MsourceNode));
+    memset(item, 0x0, sizeof(MsourceNode));
     item->ip = NULL;
     item->contrl.fd = -1;
     item->binary.fd = -1;
+    item->contrl.online = true;
     item->pos = MNET_ONLINE_TIMER;
 
     item->contrl.fd = timerfd_create(CLOCK_REALTIME, 0);
     if (item->contrl.fd == -1) {
         TINY_LOG("create timer failure");
         RETURN(false);
-    }
+    } else TINY_LOG("timer fd %d", item->contrl.fd);
 
-    struct timespec now;
-    if (clock_gettime(CLOCK_REALTIME, &now) == -1) {
-        TINY_LOG("get time failure");
-        RETURN(false);
-    }
     struct itimerspec new_value;
-    new_value.it_value.tv_sec = now.tv_sec + 1;
-    new_value.it_value.tv_nsec = now.tv_nsec;
-    new_value.it_interval.tv_sec = 0;
-    new_value.it_interval.tv_nsec = 100000000ul;
-    if (timerfd_settime(item->contrl.fd, TFD_TIMER_ABSTIME, &new_value, NULL) == -1) {
+    new_value.it_value.tv_sec = 1;
+    new_value.it_value.tv_nsec = 0;
+    new_value.it_interval.tv_sec = 1;
+    new_value.it_interval.tv_nsec = 0;
+    if (timerfd_settime(item->contrl.fd, 0, &new_value, NULL) == -1) {
         TINY_LOG("set time failure");
         RETURN(false);
     }
@@ -204,8 +210,8 @@ static bool _onbroadcast(char cpuid[LEN_CPUID], char ip[INET_ADDRSTRLEN],
         return (ret);                                       \
     } while (0)
 
-    msourceNode *item = calloc(1, sizeof(msourceNode));
-    memset(item, 0x0, sizeof(msourceNode));
+    MsourceNode *item = calloc(1, sizeof(MsourceNode));
+    memset(item, 0x0, sizeof(MsourceNode));
 
     memcpy(item->id, cpuid, LEN_CPUID);
     item->ip = strdup(ip);
@@ -213,15 +219,13 @@ static bool _onbroadcast(char cpuid[LEN_CPUID], char ip[INET_ADDRSTRLEN],
     item->contrl.port = port_contrl;
     item->contrl.pong = g_ctime;
     item->contrl.bufrecv = NULL;
-    item->contrl.dropped = false;
-    item->contrl.complete = false;
+    item->contrl.recvlen = 0;
 
     item->binary.fd = -1;
     item->binary.port = port_binary;
     item->binary.pong = g_ctime;
     item->binary.bufrecv = NULL;
-    item->binary.dropped = false;
-    item->binary.complete = false;
+    item->binary.recvlen = 0;
 
     item->pos = MNET_ONLINE_LAN;
 
@@ -259,6 +263,7 @@ static bool _onbroadcast(char cpuid[LEN_CPUID], char ip[INET_ADDRSTRLEN],
     fcntl(item->contrl.fd, F_SETFL, fcntl(item->contrl.fd, F_GETFL) | O_NONBLOCK);
 
     send(item->contrl.fd, sendbuf, sendlen, MSG_NOSIGNAL);
+    //MSG_LOG("SEND: ", sendbuf, sendlen);
 
     /*
      * binary
@@ -283,10 +288,17 @@ static bool _onbroadcast(char cpuid[LEN_CPUID], char ip[INET_ADDRSTRLEN],
     fcntl(item->binary.fd, F_SETFL, fcntl(item->binary.fd, F_GETFL) | O_NONBLOCK);
 
     send(item->binary.fd, sendbuf, sendlen, MSG_NOSIGNAL);
+    //MSG_LOG("SEND: ", sendbuf, sendlen);
 
-    g_timers = timerAdd(g_timers, HEARTBEAT_PERIOD, item, _keep_heartbeat);
+    g_timers = timerAdd(g_timers, HEARTBEAT_PERIOD, true, item, _keep_heartbeat);
 
 #undef RETURN
+
+    TINY_LOG("%s contrl fd %d, binary fd %d", cpuid, item->contrl.fd, item->binary.fd);
+
+    /* 一切完成后，再加入 select 队列 */
+    item->contrl.online = true;
+    item->binary.online = true;
 
     item->next = m_sources;
     m_sources = item;
@@ -364,9 +376,9 @@ char* mnetDiscovery()
     }
 }
 
-msourceNode* _source_find(msourceNode *nodes, char *id)
+MsourceNode* _source_find(MsourceNode *nodes, char *id)
 {
-    msourceNode *node = nodes;
+    MsourceNode *node = nodes;
     while (node) {
         if (node->pos > MNET_ONLINE_TIMER && !strcmp(node->id, id)) return node;
 
@@ -379,11 +391,12 @@ msourceNode* _source_find(msourceNode *nodes, char *id)
 /*
  * ============ business ============
  */
-bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name)
+bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name,
+                 CONTRL_CALLBACK callback)
 {
     if (!id) return false;
 
-    msourceNode *item = _source_find(m_sources, id);
+    MsourceNode *item = _source_find(m_sources, id);
     if (!item) return false;
 
     if (item->pos != MNET_ONLINE_LAN) {
@@ -391,7 +404,7 @@ bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name)
         return false;
     }
 
-    struct net_node *node = &item->contrl;
+    NetNode *node = &item->contrl;
 
     MDF *datanode;
     mdf_init(&datanode);
@@ -407,6 +420,7 @@ bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name)
         return false;
     }
     packetCRCFill(packet);
+    if (callback) callbackRegist(packet->seqnum, packet->command, callback);
 
     SSEND(node->fd, node->bufsend, sendlen);
 
@@ -425,9 +439,16 @@ char* mnetDiscover2()
 
 
 #ifdef EXECUTEABLE
+
+static void _on_wifi_setted(bool success, char *errmsg, MDF *nodein)
+{
+    TINY_LOG("wifi setted %s", success ? "OK" : errmsg);
+}
+
 int main(int argc, char *argv[])
 {
     clientInit();
+    callbackStart();
     mnetStart();
 
     char *id = mnetDiscovery();
@@ -436,9 +457,11 @@ int main(int argc, char *argv[])
 
     sleep(20);
 
-    mnetWifiSet("a4204428f3063", "TPLINK_2323", "123123", "No.419");
+    mnetWifiSet("a4204428f3063", "TPLINK_2323", "123123", "No.419", _on_wifi_setted);
 
     sleep(100);
+
+    callbackStop();
 
     return 0;
 }

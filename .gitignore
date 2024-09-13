@@ -4,6 +4,8 @@
 *.pyc
 *.swp
 *.o
+*~
+cscope.*
 .DS_Store
 .atom/
 .buildlog/
