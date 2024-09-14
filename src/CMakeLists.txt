@@ -11,6 +11,10 @@ add_library(libmoc SHARED
   "mnet.c"
   "mfile.c"
   "packet.c"
+  "callback.c"
+  "client.c"
+  "server.c"
+  "timer.c"
 )
 
 set(MOC_PUBLIC_HEADERS
@@ -18,6 +22,10 @@ set(MOC_PUBLIC_HEADERS
     "mnet.h"
     "mfile.h"
     "packet.h"
+    "callback.h"
+    "client.c"
+    "server.h"
+    "timer.h"
 )
 
 set_target_properties(libmoc PROPERTIES
@@ -27,6 +35,9 @@ set_target_properties(libmoc PROPERTIES
 
 target_compile_definitions(libmoc PUBLIC DART_SHARED_LIB)
 
+set(REEF_SOURCE_DIR "C:\\Users\\DELL\\Desktop\\avm\\libreef\\src\\reef")
+target_include_directories(libmoc PUBLIC ${REEF_SOURCE_DIR}\\include)
+
 find_library( # Defines the name of the path variable that stores the
               # location of the NDK library.
               log-lib
@@ -35,9 +46,13 @@ find_library( # Defines the name of the path variable that stores the
               # CMake needs to locate.
               log )
 
+find_library(
+  reef-lib
+  libreef
+)
 # Links your native library against one or more other native libraries.
 target_link_libraries( # Specifies the target library.
                        libmoc
 
-                       # Links the log library to the target library.
-                       ${log-lib} )
+                      ${reef-lib}
+                      ${log-lib} )

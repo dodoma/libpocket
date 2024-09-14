@@ -46,6 +46,10 @@ class LibmocBindings {
   _lookup<ffi.NativeFunction<ffi.Int Function(ffi.Int, ffi.Int)>>('sum');
   late final _sum = _sumPtr.asFunction<int Function(int, int)>();
 
+  int mnetStart() {return _mnetStart();}
+  late final _mnetStartPtr = _lookup<ffi.NativeFunction<ffi.Int Function()>>('mnetStart');
+  late final _mnetStart = _mnetStartPtr.asFunction<int Function()>();
+
   /// A longer lived native function, which occupies the thread calling it.
   ///
   /// Do not call these kind of native functions in the main isolate. They will
@@ -75,7 +79,7 @@ class LibmocBindings {
   }
   late final _mnet_discoveryPtr =
   _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Int8> Function()>>(
-    'mnet_discovery');
+    'mnetDiscovery');
   late final _mnet_discovery =
   _mnet_discoveryPtr.asFunction<ffi.Pointer<ffi.Int8> Function()>();
 

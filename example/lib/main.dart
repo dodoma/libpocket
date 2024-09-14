@@ -28,6 +28,7 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     sumResult = libmoc.sum(1, 2);
+    libmoc.mocInit();
     //sumAsyncResult = libmoc.sumAsync(3, 4);
     mocstring = libmoc.mocDiscovery();
   }

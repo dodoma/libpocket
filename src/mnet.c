@@ -7,8 +7,8 @@
 #include "client.h"
 #include "server.h"
 
-#define HEARTBEAT_PERIOD 5
-#define HEARTBEAT_TIMEOUT 15
+#define HEARTBEAT_PERIOD 20
+#define HEARTBEAT_TIMEOUT 90
 #define RECONNECT_TIMEOUT 30
 
 time_t g_ctime, g_starton, g_elapsed;
@@ -156,10 +156,10 @@ static void* el_routine(void *arg)
             if (item->pos == MNET_ONLINE_TIMER) {
                 if (FD_ISSET(item->contrl.fd, &readset)) _timer_handler(item->contrl.fd);
             } else if (item->pos == MNET_ONLINE_LAN) {
-                if (FD_ISSET(item->contrl.fd, &readset)) {
+                if (item->contrl.online && FD_ISSET(item->contrl.fd, &readset)) {
                     clientRecv(item->contrl.fd, &item->contrl);
                 }
-                if (FD_ISSET(item->binary.fd, &readset)) {
+                if (item->binary.online && FD_ISSET(item->binary.fd, &readset)) {
                     //clientRecv(item->binary.fd, &item->binary);
                 }
             }
@@ -176,6 +176,9 @@ bool mnetStart()
     g_ctime = time(NULL);
     g_starton = g_ctime;
     g_elapsed = 0;
+
+    clientInit();
+    callbackStart();
 
 #define RETURN(ret)                             \
     do {                                        \
@@ -399,6 +402,7 @@ char* mnetDiscover2()
     sleep(3);
     //return "imdiscover";
     return NULL;
+    //return mdf_get_value();
 }
 
 
@@ -411,8 +415,6 @@ static void _on_wifi_setted(bool success, char *errmsg, MDF *nodein)
 
 int main(int argc, char *argv[])
 {
-    clientInit();
-    callbackStart();
     mnetStart();
 
     char *id = mnetDiscovery();

@@ -15,6 +15,8 @@ import 'libmoc_bindings_generated.dart';
 int sum(int a, int b) => _bindings.sum(a, b);
 String fileTest(String dir) => _bindings.mfile_test(dir.toNativeUtf8().cast<Int8>()).cast<Utf8>().toDartString();
 
+int mocInit() => _bindings.mnetStart();
+
 
 /// A longer lived native function, which occupies the thread calling it.
 ///
@@ -154,11 +156,11 @@ Future<SendPort> _helperIsolateSendPort = () async {
           return;
         } else if (data is _CoverRequest) {
           Pointer<Int8> resultPtr = _bindings.mnet_discovery();
+          //Pointer<Int8> resultPtr = _bindings.mnet_discover2();
           String result = "";
           if (resultPtr.address != nullptr.address) {
-            result = resultPtr.cast<Utf8>().toDartString();            
+            result = resultPtr.cast<Utf8>().toDartString();
           }
-          //final String result = _bindings.mnet_discover2().cast<Utf8>().toDartString();
           final _CoverResponse response = _CoverResponse(data.id, result);
           sendPort.send(response);
           return;
