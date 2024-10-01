@@ -78,8 +78,9 @@ bool mnetOnlineCheck(char *id);
  */
 bool mnetPlayRandom(char *id);
 
-bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name, CONTRL_CALLBACK);
+bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name, CONTRL_CALLBACK callback);
 
+bool onPlaying(char *id, CONTRL_CALLBACK callback);
 
 char* mnetDiscover2();
 

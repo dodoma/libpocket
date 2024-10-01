@@ -4,14 +4,14 @@
 /*
  * callback, 处理用户的网络事件回调
  */
-typedef void (*CONTRL_CALLBACK)(bool success, char *errmsg, MDF *nodein);
+typedef void (*CONTRL_CALLBACK)(bool success, char *errmsg, char *response);
 
 typedef struct queue_entry {
     uint16_t seqnum;
     uint16_t command;
     bool success;
     char *errmsg;
-    MDF *nodein;
+    char *response;
 
     struct queue_entry *next;
 } QueueEntry;
@@ -28,6 +28,7 @@ typedef struct {
 typedef struct {
     uint16_t seqnum;
     uint16_t command;
+    bool disposable;
     CONTRL_CALLBACK callback;
 } CallbackEntry;
 
@@ -42,8 +43,8 @@ typedef struct {
 void callbackStart();
 void callbackStop();
 
-void callbackRegist(uint16_t seqnum, uint16_t command, CONTRL_CALLBACK callback);
-void callbackOn(uint16_t seqnum, uint16_t command, bool success, char *errmsg, MDF *nodein);
+void callbackRegist(uint16_t seqnum, uint16_t command, CONTRL_CALLBACK callback, bool onetime);
+void callbackOn(uint16_t seqnum, uint16_t command, bool success, char *errmsg, char *response);
 void callbackEntryFree(void *p);
 
 void queueEntryFree(void *p);

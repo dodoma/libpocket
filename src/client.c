@@ -18,7 +18,6 @@ static bool _parse_packet(NetNode *client, CommandPacket *packet)
     {
         bool ok = *buf; buf++;
 
-        if (*buf == 0) ok = false;
         if (packet->length > LEN_HEADER + 1 + 4) {
             int msglen = strlen((char*)buf);
             if (packet->length != LEN_HEADER + 1 + msglen + 1 + 4) {
@@ -28,6 +27,39 @@ static bool _parse_packet(NetNode *client, CommandPacket *packet)
         }
 
         callbackOn(packet->seqnum, packet->command, ok, errmsg, NULL);
+
+        if (errmsg) free(errmsg);
+
+        break;
+    }
+    case FRAME_RESPONSE:
+    {
+        int msglen = 0;
+        bool ok = *buf; buf++;
+
+        if (*buf != 0) {
+            msglen = strlen((char*)buf);
+            errmsg = strdup((char*)buf);
+            buf += msglen;
+            buf++;
+        }
+
+        if (packet->length > LEN_HEADER + 1 + msglen + 1 + 4) {
+            MDF *datanode;
+            mdf_init(&datanode);
+            if (mdf_mpack_deserialize(datanode, buf,
+                                      packet->length - (LEN_HEADER + 1 + msglen + 1 + 4)) > 0) {
+                char *response = mdf_json_export_string(datanode);
+
+                callbackOn(packet->seqnum, packet->command, ok, errmsg, response);
+
+                if (response) free(response);
+            } else TINY_LOG("message pack deserialize failure");
+
+            mdf_destroy(&datanode);
+        } else {
+            TINY_LOG("response msg error %d", packet->length);
+        }
 
         if (errmsg) free(errmsg);
 

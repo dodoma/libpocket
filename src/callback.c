@@ -21,7 +21,8 @@ static void* _do(void *arg)
 
         pthread_mutex_lock(&queue->lock);
 
-        while ((rv = pthread_cond_timedwait(&queue->cond, &queue->lock, &timeout)) == ETIMEDOUT) {
+        while (queue->size == 0 &&
+               (rv = pthread_cond_timedwait(&queue->cond, &queue->lock, &timeout)) == ETIMEDOUT) {
             timeout.tv_sec += 1;
             if (!worker->running) break;
         }
@@ -31,7 +32,7 @@ static void* _do(void *arg)
             break;
         }
 
-        if (rv != 0) {
+        if (queue->size == 0 && rv != 0) {
             TINY_LOG("timedwait error %s", strerror(errno));
             pthread_mutex_unlock(&queue->lock);
             continue;
@@ -46,9 +47,9 @@ static void* _do(void *arg)
             while (dlist) {
                 CallbackEntry *centry = (CallbackEntry*)mdlist_data(dlist);
                 if (centry->seqnum == qentry->seqnum) {
-                    centry->callback(qentry->success, qentry->errmsg, qentry->nodein);
+                    centry->callback(qentry->success, qentry->errmsg, qentry->response);
 
-                    if (centry->seqnum >= SEQ_USER_START) mdlist_eject(dlist, callbackEntryFree);
+                    if (centry->disposable) mdlist_eject(dlist, callbackEntryFree);
 
                     queueEntryFree(qentry);
                     goto done;
@@ -77,7 +78,7 @@ void queueEntryFree(void *p)
     QueueEntry *entry = (QueueEntry*)p;
 
     /* errmsg 可能固定赋值，此处不负责释放，用户自行看管 */
-    mdf_destroy(&entry->nodein);
+    if (entry->response) free(entry->response);
     free(entry);
 }
 
@@ -145,12 +146,12 @@ void queueFree(QueueManager *queue)
     mos_free(queue);
 }
 
-static void _server_closed(bool success, char *errmsg, MDF *nodein)
+static void _server_closed(bool success, char *errmsg, char *response)
 {
     TINY_LOG("server %s closed", errmsg);
 }
 
-static void _connection_lost(bool success, char *errmsg, MDF *nodein)
+static void _connection_lost(bool success, char *errmsg, char *response)
 {
     TINY_LOG("lost connection with %s", errmsg);
 }
@@ -164,8 +165,8 @@ void callbackStart()
         m_callback->callbacks = NULL;
         pthread_create(&m_callback->worker, NULL, _do, m_callback);
 
-        callbackRegist(SEQ_SERVER_CLOSED, 0, _server_closed);
-        callbackRegist(SEQ_CONNECTION_LOST, 0, _connection_lost);
+        callbackRegist(SEQ_SERVER_CLOSED, 0, _server_closed, false);
+        callbackRegist(SEQ_CONNECTION_LOST, 0, _connection_lost, false);
     }
 }
 
@@ -180,14 +181,14 @@ void callbackStop()
     m_callback = NULL;
 }
 
-void callbackOn(uint16_t seqnum, uint16_t command, bool success, char *errmsg, MDF *nodein)
+void callbackOn(uint16_t seqnum, uint16_t command, bool success, char *errmsg, char *response)
 {
     QueueEntry *entry = calloc(1, sizeof(QueueEntry));
     entry->seqnum = seqnum;
     entry->command = command;
     entry->success = success;
     entry->errmsg = errmsg;
-    entry->nodein = nodein;
+    entry->response = response;
     entry->next = NULL;
 
     pthread_mutex_lock(&m_callback->queue->lock);
@@ -196,13 +197,14 @@ void callbackOn(uint16_t seqnum, uint16_t command, bool success, char *errmsg, M
     pthread_mutex_unlock(&m_callback->queue->lock);
 }
 
-void callbackRegist(uint16_t seqnum, uint16_t command, CONTRL_CALLBACK callback)
+void callbackRegist(uint16_t seqnum, uint16_t command, CONTRL_CALLBACK callback, bool onetime)
 {
     if (!callback) return;
 
     CallbackEntry *centry = calloc(1, sizeof(CallbackEntry));
     centry->seqnum = seqnum;
     centry->callback = callback;
+    centry->disposable = onetime;
 
     MDLIST *dlist = mdlist_new(centry);
     m_callback->callbacks = mdlist_concat(m_callback->callbacks, dlist);

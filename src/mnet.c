@@ -387,7 +387,7 @@ bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name,
         return false;
     }
     packetCRCFill(packet);
-    if (callback) callbackRegist(packet->seqnum, packet->command, callback);
+    if (callback) callbackRegist(packet->seqnum, packet->command, callback, true);
 
     SSEND(node->fd, node->bufsend, sendlen);
 
@@ -396,6 +396,25 @@ bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name,
     return true;
 }
 
+bool onPlaying(char *id, CONTRL_CALLBACK callback)
+{
+    if (!id || !callback) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    NetNode *node = &item->contrl;
+
+    CommandPacket *packet = packetCommandFill(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetNODataFill(packet, FRAME_CMD, CMD_WHERE_AM_I);
+    packetCRCFill(packet);
+
+    callbackRegist(packet->seqnum, packet->command, callback, false);
+
+    SSEND(node->fd, node->bufsend, sendlen);
+
+    return true;
+}
 
 char* mnetDiscover2()
 {
@@ -408,9 +427,14 @@ char* mnetDiscover2()
 
 #ifdef EXECUTEABLE
 
-static void _on_wifi_setted(bool success, char *errmsg, MDF *nodein)
+static void _on_wifi_setted(bool success, char *errmsg, char *response)
 {
     TINY_LOG("wifi setted %s", success ? "OK" : errmsg);
+}
+
+static void _on_playing(bool success, char *errmsg, char *response)
+{
+    TINY_LOG("on RESPONSE %d %s", success, response);
 }
 
 int main(int argc, char *argv[])
@@ -423,7 +447,8 @@ int main(int argc, char *argv[])
 
     sleep(20);
 
-    mnetWifiSet("a4204428f3063", "TPLINK_2323", "123123", "No.419", _on_wifi_setted);
+    //mnetWifiSet("a4204428f3063", "TPLINK_2323", "123123", "No.419", _on_wifi_setted);
+    onPlaying("a4204428f3063", _on_playing);
 
     sleep(100);
 
