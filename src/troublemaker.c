@@ -63,7 +63,7 @@ void test_3(int fd, uint8_t *bufrand, size_t randlen)
     mdf_set_value(datanode, "passwd", "DSFPSDPVS*(234jskdfj;asdfpsidjfp983u24wjdifpaoisdufpas98df90s87aspdfu34r2D*#$Y*(_!)+@#sdfaopfi3rpfQ#IPO@IF");
     mdf_set_value(datanode, "name", "我是个测试音源");
 
-    CommandPacket *packet = packetCommandFill(bufsend, LEN_PACKET_NORMAL);
+    MessagePacket *packet = packetMessageInit(bufsend, LEN_PACKET_NORMAL);
     size_t sendlen = packetDataFill(packet, FRAME_HARDWARE, CMD_WIFI_SET, datanode);
     if (sendlen == 0) {
         TINY_LOG("message too loooong");
@@ -86,7 +86,7 @@ void test_4(int fd, uint8_t *bufrand, size_t randlen)
     mdf_set_value(datanode, "passwd", "DSFPSDPVS*(234jskdfj;asdfpsidjfp983u24wjdifpaoisdufpas98df90s87aspdfu34r2D*#$Y*(_!)+@#sdfaopfi3rpfQ#IPO@IF");
     mdf_set_value(datanode, "name", "我是个测试音源");
 
-    CommandPacket *packet = packetCommandFill(bufsend, LEN_PACKET_NORMAL);
+    MessagePacket *packet = packetMessageInit(bufsend, LEN_PACKET_NORMAL);
     size_t sendlen = packetDataFill(packet, FRAME_HARDWARE, CMD_WIFI_SET, datanode);
     if (sendlen == 0) {
         TINY_LOG("message too loooong");
@@ -117,7 +117,7 @@ void test_5(int fd, uint8_t *bufrand, size_t randlen)
     mdf_set_value(datanode, "passwd", "XZZZZZZZZZZZZZZZZZZZZZZXC*#$Y*(_FDSFSDFSDFSDFSDFSDFSDFSDFSDFSDFSD!)+@#sdfaopfi3rpfQ#IPO@IF");
     mdf_set_value(datanode, "name", "我是个测试音源2");
 
-    CommandPacket *packet = packetCommandFill(bufsend, LEN_PACKET_NORMAL);
+    MessagePacket *packet = packetMessageInit(bufsend, LEN_PACKET_NORMAL);
     size_t sendlen = packetDataFill(packet, FRAME_HARDWARE, CMD_WIFI_SET, datanode);
     if (sendlen == 0) {
         TINY_LOG("message too loooong");
@@ -142,7 +142,7 @@ void test_6(int fd, uint8_t *bufrand, size_t randlen)
     mdf_set_value(datanode, "passwd", "XZZZZZZZZZZZZZZZZZZZZZZXC*#$Y*(_FDSFSDFSDFSDFSDFSDFSDFSDFSDFSDFSD!)+@#sdfaopfi3rpfQ#IPO@IF");
     mdf_set_value(datanode, "name", "我是个测试音源2");
 
-    CommandPacket *packet = packetCommandFill(bufsend, LEN_PACKET_NORMAL);
+    MessagePacket *packet = packetMessageInit(bufsend, LEN_PACKET_NORMAL);
     size_t sendlen = packetDataFill(packet, FRAME_HARDWARE, CMD_WIFI_SET, datanode);
     if (sendlen == 0) {
         TINY_LOG("message too loooong");

@@ -28,7 +28,6 @@ typedef struct {
 typedef struct {
     uint16_t seqnum;
     uint16_t command;
-    bool disposable;
     CONTRL_CALLBACK callback;
 } CallbackEntry;
 
@@ -43,7 +42,7 @@ typedef struct {
 void callbackStart();
 void callbackStop();
 
-void callbackRegist(uint16_t seqnum, uint16_t command, CONTRL_CALLBACK callback, bool onetime);
+void callbackRegist(uint16_t seqnum, uint16_t command, CONTRL_CALLBACK callback);
 void callbackOn(uint16_t seqnum, uint16_t command, bool success, char *errmsg, char *response);
 void callbackEntryFree(void *p);
 

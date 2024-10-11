@@ -49,7 +49,7 @@ static void* _do(void *arg)
                 if (centry->seqnum == qentry->seqnum) {
                     centry->callback(qentry->success, qentry->errmsg, qentry->response);
 
-                    if (centry->disposable) mdlist_eject(dlist, callbackEntryFree);
+                    if (centry->seqnum >= SEQ_USER_START) mdlist_eject(dlist, callbackEntryFree);
 
                     queueEntryFree(qentry);
                     goto done;
@@ -165,8 +165,8 @@ void callbackStart()
         m_callback->callbacks = NULL;
         pthread_create(&m_callback->worker, NULL, _do, m_callback);
 
-        callbackRegist(SEQ_SERVER_CLOSED, 0, _server_closed, false);
-        callbackRegist(SEQ_CONNECTION_LOST, 0, _connection_lost, false);
+        callbackRegist(SEQ_SERVER_CLOSED, 0, _server_closed);
+        callbackRegist(SEQ_CONNECTION_LOST, 0, _connection_lost);
     }
 }
 
@@ -197,14 +197,13 @@ void callbackOn(uint16_t seqnum, uint16_t command, bool success, char *errmsg, c
     pthread_mutex_unlock(&m_callback->queue->lock);
 }
 
-void callbackRegist(uint16_t seqnum, uint16_t command, CONTRL_CALLBACK callback, bool onetime)
+void callbackRegist(uint16_t seqnum, uint16_t command, CONTRL_CALLBACK callback)
 {
     if (!callback) return;
 
     CallbackEntry *centry = calloc(1, sizeof(CallbackEntry));
     centry->seqnum = seqnum;
     centry->callback = callback;
-    centry->disposable = onetime;
 
     MDLIST *dlist = mdlist_new(centry);
     m_callback->callbacks = mdlist_concat(m_callback->callbacks, dlist);

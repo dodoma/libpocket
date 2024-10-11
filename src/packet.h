@@ -32,6 +32,7 @@ typedef enum {
     SEQ_RESERVE = 0,
     SEQ_SERVER_CLOSED,
     SEQ_CONNECTION_LOST,
+    SEQ_ON_PLAYING,             /* 持续查询当前播放信息（文件，位置等） */
     SEQ_USER_START = 0x401,
 } SYS_CALLBACK_SEQ;
 

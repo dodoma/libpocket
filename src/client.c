@@ -8,7 +8,7 @@
 
 static uint8_t *m_recvbuf = NULL;
 
-static bool _parse_packet(NetNode *client, CommandPacket *packet)
+static bool _parse_packet(NetNode *client, MessagePacket *packet)
 {
     uint8_t *buf = packet->data;
     char *errmsg = NULL;
@@ -108,7 +108,7 @@ static bool _parse_recv(NetNode *client, uint8_t *recvbuf, size_t recvlen)
     } else {
         if (recvlen < LEN_HEADER + 1 + 4) PARTLY_PACKET;
 
-        CommandPacket *packet = packetCommandGot(recvbuf, recvlen);
+        MessagePacket *packet = packetMessageGot(recvbuf, recvlen);
         if (packet->sof == PACKET_SOF && packet->idiot == 1) {
             if (recvlen < packet->length) {
                 if (packet->length > CONTRL_PACKET_MAX_LEN) {

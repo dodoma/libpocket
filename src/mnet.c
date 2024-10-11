@@ -316,8 +316,8 @@ char* mnetDiscovery()
         int port = ntohs(othersa.sin_port);
         TINY_LOG("received %d bytes data from %s %d", rv, ip, port);
 
-        CommandPacket *packet = packetCommandGot(rcvbuf, rv);
-        if (packet && packet->frame_type == FRAME_MSG) {
+        MessagePacket *packet = packetMessageGot(rcvbuf, rv);
+        if (packet && packet->frame_type == FRAME_CMD) {
             if (packet->command == CMD_BROADCAST) {
                 uint8_t *buf = packet->data;
 
@@ -379,7 +379,7 @@ bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name,
     mdf_set_value(datanode, "passwd", passwd);
     mdf_set_value(datanode, "name", name);
 
-    CommandPacket *packet = packetCommandFill(node->bufsend, LEN_PACKET_NORMAL);
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
     size_t sendlen = packetDataFill(packet, FRAME_HARDWARE, CMD_WIFI_SET, datanode);
     if (sendlen == 0) {
         TINY_LOG("message too loooong");
@@ -387,7 +387,7 @@ bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name,
         return false;
     }
     packetCRCFill(packet);
-    if (callback) callbackRegist(packet->seqnum, packet->command, callback, true);
+    if (callback) callbackRegist(packet->seqnum, packet->command, callback);
 
     SSEND(node->fd, node->bufsend, sendlen);
 
@@ -405,11 +405,12 @@ bool onPlaying(char *id, CONTRL_CALLBACK callback)
 
     NetNode *node = &item->contrl;
 
-    CommandPacket *packet = packetCommandFill(node->bufsend, LEN_PACKET_NORMAL);
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
     size_t sendlen = packetNODataFill(packet, FRAME_CMD, CMD_WHERE_AM_I);
     packetCRCFill(packet);
 
-    callbackRegist(packet->seqnum, packet->command, callback, false);
+    packet->seqnum = SEQ_ON_PLAYING;
+    callbackRegist(packet->seqnum, packet->command, callback);
 
     SSEND(node->fd, node->bufsend, sendlen);
 
