@@ -14,6 +14,14 @@ static bool _parse_packet(NetNode *client, MessagePacket *packet)
     char *errmsg = NULL;
 
     switch (packet->frame_type) {
+    /*
+     * 0 1 2 3 4 5 6 7 8
+     * /---------------\
+     * |   success     |
+     * ...  errmsg   ...
+     * |      \0       |
+     * \---------------/
+     */
     case FRAME_ACK:
     {
         bool ok = *buf; buf++;
@@ -27,11 +35,17 @@ static bool _parse_packet(NetNode *client, MessagePacket *packet)
         }
 
         callbackOn(packet->seqnum, packet->command, ok, errmsg, NULL);
-
-        if (errmsg) free(errmsg);
-
         break;
     }
+    /*
+     * 0 1 2 3 4 5 6 7 8
+     * /---------------\
+     * |   success     |
+     * ...  errmsg   ...
+     * |      \0       |
+     * ... message pack ...
+     * \---------------/
+     */
     case FRAME_RESPONSE:
     {
         int msglen = 0;
@@ -43,26 +57,23 @@ static bool _parse_packet(NetNode *client, MessagePacket *packet)
             buf += msglen;
             buf++;
         }
+        buf++;
 
+        MDF *datanode;
+        mdf_init(&datanode);
         if (packet->length > LEN_HEADER + 1 + msglen + 1 + 4) {
-            MDF *datanode;
-            mdf_init(&datanode);
             if (mdf_mpack_deserialize(datanode, buf,
-                                      packet->length - (LEN_HEADER + 1 + msglen + 1 + 4)) > 0) {
-                char *response = mdf_json_export_string(datanode);
-
-                callbackOn(packet->seqnum, packet->command, ok, errmsg, response);
-
-                if (response) free(response);
-            } else TINY_LOG("message pack deserialize failure");
-
-            mdf_destroy(&datanode);
-        } else {
-            TINY_LOG("response msg error %d", packet->length);
+                                      packet->length - (LEN_HEADER + 1 + msglen + 1 + 4)) <= 0) {
+                TINY_LOG("message pack deserialize failure");
+                if (errmsg) free(errmsg);
+                break;
+            }
         }
 
-        if (errmsg) free(errmsg);
+        char *response = mdf_json_export_string(datanode);
+        mdf_destroy(&datanode);
 
+        callbackOn(packet->seqnum, packet->command, ok, errmsg, response);
         break;
     }
     default:
@@ -191,5 +202,5 @@ void serverClosed(NetNode *client)
     close(client->fd);
     client->fd = -1;
 
-    callbackOn(SEQ_SERVER_CLOSED, 0, false, client->upnode->id, NULL);
+    callbackOn(SEQ_SERVER_CLOSED, 0, false, strdup(client->upnode->id), NULL);
 }

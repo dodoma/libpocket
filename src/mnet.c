@@ -45,7 +45,7 @@ static bool _keep_heartbeat(void *data)
             item->contrl.online = false;
             item->contrl.pong = g_ctime;
 
-            callbackOn(SEQ_CONNECTION_LOST, 0, false, item->id, NULL);
+            callbackOn(SEQ_CONNECTION_LOST, 0, false, strdup(item->id), NULL);
         } else {
             send(item->contrl.fd, sendbuf, sendlen, MSG_NOSIGNAL);
             //MSG_LOG("SEND: ", sendbuf, sendlen);
@@ -66,7 +66,7 @@ static bool _keep_heartbeat(void *data)
             item->binary.online = false;
             item->binary.pong = g_ctime;
 
-            callbackOn(SEQ_CONNECTION_LOST, 1, false, item->id, NULL);
+            callbackOn(SEQ_CONNECTION_LOST, 1, false, strdup(item->id), NULL);
         } else {
             send(item->binary.fd, sendbuf, sendlen, MSG_NOSIGNAL);
             //MSG_LOG("SEND: ", sendbuf, sendlen);
@@ -406,10 +406,10 @@ bool onPlaying(char *id, CONTRL_CALLBACK callback)
     NetNode *node = &item->contrl;
 
     MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
-    size_t sendlen = packetNODataFill(packet, FRAME_CMD, CMD_WHERE_AM_I);
+    packet->seqnum = SEQ_ON_PLAYING;
+    size_t sendlen = packetNODataFill(packet, FRAME_AUDIO, CMD_WHERE_AM_I);
     packetCRCFill(packet);
 
-    packet->seqnum = SEQ_ON_PLAYING;
     callbackRegist(packet->seqnum, packet->command, callback);
 
     SSEND(node->fd, node->bufsend, sendlen);
@@ -435,7 +435,7 @@ static void _on_wifi_setted(bool success, char *errmsg, char *response)
 
 static void _on_playing(bool success, char *errmsg, char *response)
 {
-    TINY_LOG("on RESPONSE %d %s", success, response);
+    TINY_LOG("on RESPONSE %d %s %s", success, errmsg, response);
 }
 
 int main(int argc, char *argv[])
@@ -446,7 +446,7 @@ int main(int argc, char *argv[])
 
     TINY_LOG("%s", id);
 
-    sleep(20);
+    sleep(5);
 
     //mnetWifiSet("a4204428f3063", "TPLINK_2323", "123123", "No.419", _on_wifi_setted);
     onPlaying("a4204428f3063", _on_playing);

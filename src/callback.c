@@ -77,7 +77,7 @@ void queueEntryFree(void *p)
 
     QueueEntry *entry = (QueueEntry*)p;
 
-    /* errmsg 可能固定赋值，此处不负责释放，用户自行看管 */
+    if (entry->errmsg) free(entry->errmsg);
     if (entry->response) free(entry->response);
     free(entry);
 }

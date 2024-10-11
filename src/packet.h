@@ -14,9 +14,10 @@ typedef enum {
 typedef enum {
     FRAME_CMD = 0,         /* 硬解命令 */
     FRAME_ACK,             /* 简短回包（command, success, errmsg?） */
-    FRAME_HARDWARE,        /* 音源控制相关 */
-    FRAME_AUDIO,
     FRAME_RESPONSE,        /* 完整回包（command, success, errmsg?, nodein at least with '{}') */
+
+    FRAME_HARDWARE,        /* 音源控制相关 */
+    FRAME_AUDIO,           /* 播放相关 */
 } FRAME_TYPE;
 
 typedef enum {
