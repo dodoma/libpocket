@@ -159,7 +159,7 @@ void clientRecv(int sfd, NetNode *client)
         memset(m_recvbuf, 0x0, CONTRL_PACKET_MAX_LEN);
 
         rv = recv(sfd, m_recvbuf, CONTRL_PACKET_MAX_LEN, 0);
-        MSG_LOG("RECV: ", m_recvbuf, rv);
+        MSG_LOG(g_dumprecv, "RECV: ", m_recvbuf, rv);
 
         if (rv < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             return;
@@ -174,7 +174,7 @@ void clientRecv(int sfd, NetNode *client)
         }
     } else {
         rv = recv(sfd, client->bufrecv + client->recvlen, CONTRL_PACKET_MAX_LEN - client->recvlen, 0);
-        MSG_LOG("CRECV: ", client->bufrecv + client->recvlen, rv);
+        MSG_LOG(g_dumprecv, "CRECV: ", client->bufrecv + client->recvlen, rv);
 
         if (rv < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             return;

@@ -1,4 +1,5 @@
 #include "pocket.h"
+#include "global.h"
 
 #if defined(ANDROID)
 void TINY_LOG(const char* fmt, ...)
@@ -22,7 +23,7 @@ bool SSEND(int fd, uint8_t *buf, size_t len)
 
     while (count < len) {
         rv = send(fd, buf + count, len - count, MSG_NOSIGNAL);
-        MSG_LOG("SEND: ", buf + count, rv);
+        MSG_LOG(g_dumpsend, "SEND: ", buf + count, rv);
 
         if (rv == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK)

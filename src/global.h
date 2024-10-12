@@ -10,4 +10,7 @@ extern time_t g_ctime;
 extern time_t g_starton;
 extern time_t g_elapsed;
 
+extern bool g_dumpsend;
+extern bool g_dumprecv;
+
 #endif  /* __GLOBAL_H__ */

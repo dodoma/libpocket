@@ -12,10 +12,13 @@ size_t sendlen;
 
 time_t g_ctime, g_starton, g_elapsed;
 
+bool g_dumpsend = false;
+bool g_dumprecv = false;
+
 void test_1(int fd, uint8_t *randbuf, size_t randlen)
 {
     int rv = send(fd, randbuf, randlen, 0);
-    MSG_LOG("SEND: ", randbuf, rv);
+    MSG_LOG(g_dumpsend, "SEND: ", randbuf, rv);
 }
 
 void test_2(int fd, uint8_t *randbuf, size_t randlen)
@@ -23,36 +26,36 @@ void test_2(int fd, uint8_t *randbuf, size_t randlen)
     char buf[1] = {0xAA};
 
     int rv = send(fd, buf, 1, 0);
-    MSG_LOG("SEND: ", buf, 1);
+    MSG_LOG(g_dumpsend, "SEND: ", buf, 1);
 
     sleep(1);
     buf[0] = 0x65;
     rv = send(fd, buf, 1, 0);
-    MSG_LOG("SEND: ", buf, 1);
+    MSG_LOG(g_dumpsend, "SEND: ", buf, 1);
 
     sleep(1);
     buf[0] = 0xAA;
     rv = send(fd, buf, 1, 0);
-    MSG_LOG("SEND: ", buf, 1);
+    MSG_LOG(g_dumpsend, "SEND: ", buf, 1);
 
     sleep(1);
     buf[0] = 0x69;
     rv = send(fd, buf, 1, 0);
-    MSG_LOG("SEND: ", buf, 1);
+    MSG_LOG(g_dumpsend, "SEND: ", buf, 1);
 
     sleep(1);
     buf[0] = 0xAA;
     rv = send(fd, buf, 1, 0);
-    MSG_LOG("SEND: ", buf, 1);
+    MSG_LOG(g_dumpsend, "SEND: ", buf, 1);
 
     sleep(1);
     buf[0] = 0x62;
     rv = send(fd, buf, 1, 0);
-    MSG_LOG("SEND: ", buf, 1);
+    MSG_LOG(g_dumpsend, "SEND: ", buf, 1);
 
     sleep(1);
     rv = send(fd, randbuf, randlen, 0);
-    MSG_LOG("SEND: ", randbuf, rv);
+    MSG_LOG(g_dumpsend, "SEND: ", randbuf, rv);
 }
 
 void test_3(int fd, uint8_t *bufrand, size_t randlen)
@@ -73,7 +76,7 @@ void test_3(int fd, uint8_t *bufrand, size_t randlen)
     packetCRCFill(packet);
 
     int rv = send(fd, bufsend, sendlen, 0);
-    MSG_LOG("SEND: ", bufsend, rv);
+    MSG_LOG(g_dumpsend, "SEND: ", bufsend, rv);
 
     mdf_destroy(&datanode);
 }
@@ -96,15 +99,15 @@ void test_4(int fd, uint8_t *bufrand, size_t randlen)
     packetCRCFill(packet);
 
     int rv = send(fd, bufsend, 100, 0);
-    MSG_LOG("SEND: ", bufsend, rv);
+    MSG_LOG(g_dumpsend, "SEND: ", bufsend, rv);
 
     sleep(2);
     rv = send(fd, bufsend + 100, 50, 0);
-    MSG_LOG("SEND: ", bufsend + 100, rv);
+    MSG_LOG(g_dumpsend, "SEND: ", bufsend + 100, rv);
 
     sleep(3);
     rv = send(fd, bufsend + 150, sendlen - 150, 0);
-    MSG_LOG("SEND: ", bufsend + 150, rv);
+    MSG_LOG(g_dumpsend, "SEND: ", bufsend + 150, rv);
 
     mdf_destroy(&datanode);
 }
@@ -128,7 +131,7 @@ void test_5(int fd, uint8_t *bufrand, size_t randlen)
 
     for (int i = 0; i < 100; i++) {
         int rv = send(fd, bufsend, sendlen, 0);
-        MSG_LOG("SEND: ", bufsend, rv);
+        MSG_LOG(g_dumpsend, "SEND: ", bufsend, rv);
     }
 
     mdf_destroy(&datanode);
@@ -152,11 +155,11 @@ void test_6(int fd, uint8_t *bufrand, size_t randlen)
     packetCRCFill(packet);
 
     int rv = send(fd, bufsend, 100, 0);
-    MSG_LOG("SEND: ", bufsend, rv);
+    MSG_LOG(g_dumpsend, "SEND: ", bufsend, rv);
 
     sleep(5);
     rv = send(fd, bufsend + 100, 50, 0);
-    MSG_LOG("SEND: ", bufsend + 100, rv);
+    MSG_LOG(g_dumpsend, "SEND: ", bufsend + 100, rv);
 
     sleep(3);
 
@@ -165,17 +168,17 @@ void test_6(int fd, uint8_t *bufrand, size_t randlen)
     bufptr += sendlen - 150;
 
     //rv = send(fd, bufsend + 150, sendlen - 150, 0);
-    //MSG_LOG("SEND: ", bufsend + 150, rv);
+    //MSG_LOG(g_dumpsend, "SEND: ", bufsend + 150, rv);
 
     for (int i = 0; i < 100; i++) {
         //int rv = send(fd, bufsend, sendlen, 0);
-        //MSG_LOG("SEND: ", bufsend, rv);
+        //MSG_LOG(g_dumpsend, "SEND: ", bufsend, rv);
         memcpy(bufptr, bufsend, sendlen);
         bufptr += sendlen;
     }
 
     rv = send(fd, mixbuf, bufptr - mixbuf, 0);
-    MSG_LOG("SEND: ", mixbuf, rv);
+    MSG_LOG(g_dumpsend, "SEND: ", mixbuf, rv);
 
     free(mixbuf);
 

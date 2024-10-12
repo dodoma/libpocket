@@ -35,9 +35,9 @@ void TINY_LOG(const char* fmt, ...);
     } while(0)
 #endif  /* ANDROID */
 
-#define MSG_LOG(pre, p, psize)                                  \
+#define MSG_LOG(noise, pre, p, psize)                           \
     do {                                                        \
-        if ((ssize_t)(psize) > 0) {                             \
+        if ((noise) && (ssize_t)(psize) > 0) {                  \
             char zstra[(psize)*2+1];                            \
             pocket_bin2hexstr((uint8_t*)(p), (psize), zstra);   \
             TINY_LOG("%s%zu %s", pre, (size_t)(psize), zstra);  \

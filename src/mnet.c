@@ -16,6 +16,9 @@ time_t g_ctime, g_starton, g_elapsed;
 pthread_t m_worker;
 MsourceNode *m_sources = NULL;
 
+bool g_dumpsend = false;
+bool g_dumprecv = false;
+
 /*
  * 争取做到 moc server 与 音源 一套心跳维护逻辑
  */
@@ -417,6 +420,24 @@ bool onPlaying(char *id, CONTRL_CALLBACK callback)
     return true;
 }
 
+bool play(char *id)
+{
+    if (!id) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    NetNode *node = &item->contrl;
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetNODataFill(packet, FRAME_AUDIO, CMD_PLAY);
+    packetCRCFill(packet);
+
+    SSEND(node->fd, node->bufsend, sendlen);
+
+    return true;
+}
+
 char* mnetDiscover2()
 {
     sleep(3);
@@ -447,11 +468,13 @@ int main(int argc, char *argv[])
     TINY_LOG("%s", id);
 
     sleep(5);
-
     //mnetWifiSet("a4204428f3063", "TPLINK_2323", "123123", "No.419", _on_wifi_setted);
+    play("a4204428f3063");
+
+    sleep(5);
     onPlaying("a4204428f3063", _on_playing);
 
-    sleep(100);
+    sleep(10000);
 
     callbackStop();
 
