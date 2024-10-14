@@ -80,7 +80,12 @@ bool mnetPlayRandom(char *id);
 
 bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name, CONTRL_CALLBACK callback);
 
-bool onPlaying(char *id, CONTRL_CALLBACK callback);
+bool mnetPlayInfo(char *id, CONTRL_CALLBACK callback);
+bool mnetOnStep(char *id, CONTRL_CALLBACK callback);
+bool mnetPlay(char *id);
+bool mnetPause(char *id);
+bool mnetResume(char *id);
+bool mnetNext(char *id);
 
 char* mnetDiscover2();
 

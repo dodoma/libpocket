@@ -156,6 +156,11 @@ static void _connection_lost(bool success, char *errmsg, char *response)
     TINY_LOG("lost connection with %s", errmsg);
 }
 
+static void _on_playing_step(bool success, char *errmsg, char *response)
+{
+    TINY_LOG("play step ahead");
+}
+
 void callbackStart()
 {
     if (!m_callback) {
@@ -167,6 +172,7 @@ void callbackStart()
 
         callbackRegist(SEQ_SERVER_CLOSED, 0, _server_closed);
         callbackRegist(SEQ_CONNECTION_LOST, 0, _connection_lost);
+        //callbackRegist(SEQ_PLAY_STEP, 0, _on_playing_step);
     }
 }
 

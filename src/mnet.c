@@ -399,7 +399,7 @@ bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name,
     return true;
 }
 
-bool onPlaying(char *id, CONTRL_CALLBACK callback)
+bool mnetPlayInfo(char *id, CONTRL_CALLBACK callback)
 {
     if (!id || !callback) return false;
 
@@ -409,8 +409,8 @@ bool onPlaying(char *id, CONTRL_CALLBACK callback)
     NetNode *node = &item->contrl;
 
     MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
-    packet->seqnum = SEQ_ON_PLAYING;
-    size_t sendlen = packetNODataFill(packet, FRAME_AUDIO, CMD_WHERE_AM_I);
+    packet->seqnum = SEQ_PLAY_INFO;
+    size_t sendlen = packetNODataFill(packet, FRAME_AUDIO, CMD_PLAY_INFO);
     packetCRCFill(packet);
 
     callbackRegist(packet->seqnum, packet->command, callback);
@@ -420,7 +420,16 @@ bool onPlaying(char *id, CONTRL_CALLBACK callback)
     return true;
 }
 
-bool play(char *id)
+bool mnetOnStep(char *id, CONTRL_CALLBACK callback)
+{
+    if (!id || !callback) return false;
+
+    callbackRegist(SEQ_PLAY_STEP, 0, callback);
+
+    return true;
+}
+
+bool mnetPlay(char *id)
 {
     if (!id) return false;
 
@@ -431,6 +440,60 @@ bool play(char *id)
 
     MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
     size_t sendlen = packetNODataFill(packet, FRAME_AUDIO, CMD_PLAY);
+    packetCRCFill(packet);
+
+    SSEND(node->fd, node->bufsend, sendlen);
+
+    return true;
+}
+
+bool mnetPause(char *id)
+{
+    if (!id) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    NetNode *node = &item->contrl;
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetNODataFill(packet, FRAME_AUDIO, CMD_PAUSE);
+    packetCRCFill(packet);
+
+    SSEND(node->fd, node->bufsend, sendlen);
+
+    return true;
+}
+
+bool mnetResume(char *id)
+{
+    if (!id) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    NetNode *node = &item->contrl;
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetNODataFill(packet, FRAME_AUDIO, CMD_RESUME);
+    packetCRCFill(packet);
+
+    SSEND(node->fd, node->bufsend, sendlen);
+
+    return true;
+}
+
+bool mnetNext(char *id)
+{
+    if (!id) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    NetNode *node = &item->contrl;
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetNODataFill(packet, FRAME_AUDIO, CMD_NEXT);
     packetCRCFill(packet);
 
     SSEND(node->fd, node->bufsend, sendlen);
@@ -469,10 +532,27 @@ int main(int argc, char *argv[])
 
     sleep(5);
     //mnetWifiSet("a4204428f3063", "TPLINK_2323", "123123", "No.419", _on_wifi_setted);
-    play("a4204428f3063");
+    mnetPlay("a4204428f3063");
 
-    sleep(5);
-    onPlaying("a4204428f3063", _on_playing);
+    int count = 0;
+    while (count++ < 10) {
+        sleep(25);
+        mnetPause("a4204428f3063");
+        //mnetPlayInfo("a4204428f3063", _on_playing);
+
+        sleep(5);
+        mnetResume("a4204428f3063");
+
+        sleep(6);
+        mnetPause("a4204428f3063");
+        //mnetPlayInfo("a4204428f3063", _on_playing);
+
+        sleep(5);
+        mnetResume("a4204428f3063");
+
+        sleep(5);
+        mnetNext("a4204428f3063");
+    }
 
     sleep(10000);
 

@@ -107,6 +107,9 @@ static bool _parse_recv(NetNode *client, uint8_t *recvbuf, size_t recvlen)
             //TINY_LOG("pong received");
             client->pong = g_ctime;
             break;
+        case IDIOT_PLAY_STEP:
+            callbackOn(SEQ_PLAY_STEP, 0, true, NULL, NULL);
+            break;
         default:
             TINY_LOG("unsupport idot packet %d", ipacket->idiot);
             break;
