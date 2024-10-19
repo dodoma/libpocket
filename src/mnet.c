@@ -1,8 +1,8 @@
 #include <reef.h>
 
 #include "global.h"
-#include "callback.h"
 #include "mnet.h"
+#include "callback.h"
 #include "packet.h"
 #include "client.h"
 #include "server.h"
@@ -18,6 +18,8 @@ MsourceNode *m_sources = NULL;
 
 bool g_dumpsend = false;
 bool g_dumprecv = false;
+
+static char *m_appdir = NULL;
 
 /*
  * 争取做到 moc server 与 音源 一套心跳维护逻辑
@@ -48,7 +50,7 @@ static bool _keep_heartbeat(void *data)
             item->contrl.online = false;
             item->contrl.pong = g_ctime;
 
-            callbackOn(SEQ_CONNECTION_LOST, 0, false, strdup(item->id), NULL);
+            callbackOn(&item->contrl, SEQ_CONNECTION_LOST, 0, false, strdup(item->id), NULL);
         } else {
             send(item->contrl.fd, sendbuf, sendlen, MSG_NOSIGNAL);
             //MSG_LOG("SEND: ", sendbuf, sendlen);
@@ -69,7 +71,7 @@ static bool _keep_heartbeat(void *data)
             item->binary.online = false;
             item->binary.pong = g_ctime;
 
-            callbackOn(SEQ_CONNECTION_LOST, 1, false, strdup(item->id), NULL);
+            callbackOn(&item->binary, SEQ_CONNECTION_LOST, 1, false, strdup(item->id), NULL);
         } else {
             send(item->binary.fd, sendbuf, sendlen, MSG_NOSIGNAL);
             //MSG_LOG("SEND: ", sendbuf, sendlen);
@@ -174,11 +176,12 @@ static void* el_routine(void *arg)
     return NULL;
 }
 
-bool mnetStart()
+bool mnetStart(const char *homedir)
 {
     g_ctime = time(NULL);
     g_starton = g_ctime;
     g_elapsed = 0;
+    if (homedir) m_appdir = strdup(homedir);
 
     clientInit();
     callbackStart();
@@ -193,6 +196,9 @@ bool mnetStart()
     MsourceNode *item = calloc(1, sizeof(MsourceNode));
     memset(item, 0x0, sizeof(MsourceNode));
     item->ip = NULL;
+    mdf_init(&item->dbnode);
+    item->storename = NULL;
+    item->storepath = NULL;
     item->contrl.fd = -1;
     item->binary.fd = -1;
     item->contrl.online = true;
@@ -243,6 +249,9 @@ static bool _onbroadcast(char cpuid[LEN_CPUID], char ip[INET_ADDRSTRLEN],
 
     memcpy(item->id, cpuid, LEN_CPUID);
     item->ip = strdup(ip);
+    mdf_init(&item->dbnode);
+    item->storename = NULL;
+    item->storepath = NULL;
     item->contrl.fd = -1;
     item->contrl.online = false;
     item->contrl.port = port_contrl;
@@ -501,6 +510,105 @@ bool mnetNext(char *id)
     return true;
 }
 
+bool mnetStoreList(char *id, CONTRL_CALLBACK callback)
+{
+    if (!id || !callback) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    NetNode *node = &item->contrl;
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetNODataFill(packet, FRAME_CMD, CMD_STORE_LIST);
+    packetCRCFill(packet);
+
+    callbackRegist(packet->seqnum, packet->command, callback);
+
+    SSEND(node->fd, node->bufsend, sendlen);
+
+    return true;
+}
+
+static void _on_database_check(NetNode *client, bool success, char *errmsg, char *response)
+{
+    if (success) {
+        /* db 没有变化，直接同步数据 */
+#if 0
+        MLIST *synclist = mfileBuildSynclist(client);
+        char *file;
+        MLIST_ITERATE(synclist, file) {
+            MDF *datanode;
+            mdf_init(&datanode);
+            mdf_set_value(datanode, "file", file);
+            MessagePacket *packet = packetMessageInit(client->bufsend, LEN_PACKET_NORMAL);
+            size_t sendlen = packetDataFill(packet, FRAME_STORAGE, CMD_SYNC_PULL, datanode);
+            packetCRCFill(packet);
+            mdf_destroy(&datanode);
+
+            SSEND(client->fd, client->bufsend, sendlen);
+        }
+#endif
+    } else {
+        /* 等待 music.db 接受完成后同步数据 */
+    }
+}
+
+int _store_compare(const void *anode, void *key)
+{
+    return strcmp(mdf_get_value((MDF*)anode, "name", ""), (char*)key);
+}
+
+bool mnetStoreSync(char *id, char *storename)
+{
+    if (!id || !storename) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    NetNode *node = &item->contrl;
+
+    MDF *snode = mdf_search(item->dbnode, storename, _store_compare);
+    if (!snode) {
+        TINY_LOG("find store %s failure", storename);
+        //MDF_TRACE(item->dbnode);
+        return false;
+    }
+
+    item->storename = mdf_get_value(snode, "name", NULL);
+    item->storepath = mdf_get_value(snode, "path", NULL);
+    if (!item->storename || !item->storepath) return false;
+
+    mos_mkdirf(0755, "%s/%s/%s", m_appdir, item->id, item->storepath);
+
+    MDF *datanode;
+    mdf_init(&datanode);
+
+    mdf_set_value(datanode, "name", item->storename);
+
+    char filename[PATH_MAX];
+    snprintf(filename, sizeof(filename), "%s/%s/%s/music.db", m_appdir, item->id, item->storepath);
+    char sumstr[33] = {0};
+    ssize_t filesize = mhash_md5_file_s(filename, sumstr);
+    if (filesize >= 0) {
+        mdf_set_int64_value(datanode, "size", filesize);
+        mdf_set_value(datanode, "checksum", sumstr);
+    }
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetDataFill(packet, FRAME_STORAGE, CMD_DB_MD5, datanode);
+    packetCRCFill(packet);
+
+    callbackRegist(packet->seqnum, packet->command, _on_database_check);
+
+    SSEND(node->fd, node->bufsend, sendlen);
+
+    mdf_destroy(&datanode);
+
+    return true;
+}
+
+
 char* mnetDiscover2()
 {
     sleep(3);
@@ -512,10 +620,19 @@ char* mnetDiscover2()
 
 #ifdef EXECUTEABLE
 
-static void _on_wifi_setted(bool success, char *errmsg, char *response)
+static void _on_wifi_setted(NetNode *client, bool success, char *errmsg, char *response)
 {
     TINY_LOG("wifi setted %s", success ? "OK" : errmsg);
 }
+
+static void _on_store_list(NetNode *client, bool success, char *errmsg, char *response)
+{
+    TINY_LOG("store %s %s", success ? "OK" : errmsg, response);
+
+    mdf_clear(client->upnode->dbnode);
+    mdf_json_import_string(client->upnode->dbnode, response);
+}
+
 
 static void _on_playing(bool success, char *errmsg, char *response)
 {
@@ -524,16 +641,23 @@ static void _on_playing(bool success, char *errmsg, char *response)
 
 int main(int argc, char *argv[])
 {
-    mnetStart();
+    mnetStart("./avm/");
 
     char *id = mnetDiscovery();
 
     TINY_LOG("%s", id);
 
-    sleep(5);
+    //sleep(5);
     //mnetWifiSet("a4204428f3063", "TPLINK_2323", "123123", "No.419", _on_wifi_setted);
-    mnetPlay("a4204428f3063");
+    //mnetPlay("a4204428f3063");
 
+    sleep(5);
+    mnetStoreList("a4204428f3063", _on_store_list);
+
+    sleep(5);
+    mnetStoreSync("a4204428f3063", "默认媒体库");
+
+#if 0
     int count = 0;
     while (count++ < 10) {
         sleep(25);
@@ -553,6 +677,7 @@ int main(int argc, char *argv[])
         sleep(5);
         mnetNext("a4204428f3063");
     }
+#endif
 
     sleep(10000);
 

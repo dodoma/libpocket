@@ -4,9 +4,8 @@
 /*
  * callback, 处理用户的网络事件回调
  */
-typedef void (*CONTRL_CALLBACK)(bool success, char *errmsg, char *response);
-
 typedef struct queue_entry {
+    NetNode *client;
     uint16_t seqnum;
     uint16_t command;
     bool success;
@@ -46,7 +45,8 @@ void callbackRegist(uint16_t seqnum, uint16_t command, CONTRL_CALLBACK callback)
 /*
  * 如果 errmsg, response 不为空，请确保为跨线程安全内存，回调完毕后会自动释放
  */
-void callbackOn(uint16_t seqnum, uint16_t command, bool success, char *errmsg, char *response);
+void callbackOn(NetNode *client, uint16_t seqnum, uint16_t command,
+                bool success, char *errmsg, char *response);
 void callbackEntryFree(void *p);
 
 void queueEntryFree(void *p);

@@ -1,10 +1,10 @@
 #include <reef.h>
 
 #include "global.h"
+#include "mnet.h"
 #include "callback.h"
 #include "client.h"
 #include "packet.h"
-#include "mnet.h"
 
 static uint8_t *m_recvbuf = NULL;
 
@@ -34,7 +34,7 @@ static bool _parse_packet(NetNode *client, MessagePacket *packet)
             }
         }
 
-        callbackOn(packet->seqnum, packet->command, ok, errmsg, NULL);
+        callbackOn(client, packet->seqnum, packet->command, ok, errmsg, NULL);
         break;
     }
     /*
@@ -73,7 +73,7 @@ static bool _parse_packet(NetNode *client, MessagePacket *packet)
         char *response = mdf_json_export_string(datanode);
         mdf_destroy(&datanode);
 
-        callbackOn(packet->seqnum, packet->command, ok, errmsg, response);
+        callbackOn(client, packet->seqnum, packet->command, ok, errmsg, response);
         break;
     }
     default:
@@ -108,7 +108,7 @@ static bool _parse_recv(NetNode *client, uint8_t *recvbuf, size_t recvlen)
             client->pong = g_ctime;
             break;
         case IDIOT_PLAY_STEP:
-            callbackOn(SEQ_PLAY_STEP, 0, true, NULL, NULL);
+            callbackOn(client, SEQ_PLAY_STEP, 0, true, NULL, NULL);
             break;
         default:
             TINY_LOG("unsupport idot packet %d", ipacket->idiot);
@@ -205,5 +205,5 @@ void serverClosed(NetNode *client)
     close(client->fd);
     client->fd = -1;
 
-    callbackOn(SEQ_SERVER_CLOSED, 0, false, strdup(client->upnode->id), NULL);
+    callbackOn(client, SEQ_SERVER_CLOSED, 0, false, strdup(client->upnode->id), NULL);
 }

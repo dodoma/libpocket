@@ -2,6 +2,7 @@
 
 #include "pocket.h"
 #include "packet.h"
+#include "mnet.h"
 #include "callback.h"
 
 CallbackManager *m_callback = NULL;
@@ -47,7 +48,8 @@ static void* _do(void *arg)
             while (dlist) {
                 CallbackEntry *centry = (CallbackEntry*)mdlist_data(dlist);
                 if (centry->seqnum == qentry->seqnum) {
-                    centry->callback(qentry->success, qentry->errmsg, qentry->response);
+                    centry->callback(qentry->client, qentry->success, qentry->errmsg,
+                                     qentry->response);
 
                     if (centry->seqnum >= SEQ_USER_START) mdlist_eject(dlist, callbackEntryFree);
 
@@ -146,17 +148,17 @@ void queueFree(QueueManager *queue)
     mos_free(queue);
 }
 
-static void _server_closed(bool success, char *errmsg, char *response)
+static void _server_closed(NetNode *client, bool success, char *errmsg, char *response)
 {
     TINY_LOG("server %s closed", errmsg);
 }
 
-static void _connection_lost(bool success, char *errmsg, char *response)
+static void _connection_lost(NetNode *client, bool success, char *errmsg, char *response)
 {
     TINY_LOG("lost connection with %s", errmsg);
 }
 
-static void _on_playing_step(bool success, char *errmsg, char *response)
+static void _on_playing_step(NetNode *client, bool success, char *errmsg, char *response)
 {
     TINY_LOG("play step ahead");
 }
@@ -187,9 +189,11 @@ void callbackStop()
     m_callback = NULL;
 }
 
-void callbackOn(uint16_t seqnum, uint16_t command, bool success, char *errmsg, char *response)
+void callbackOn(NetNode *client, uint16_t seqnum, uint16_t command,
+                bool success, char *errmsg, char *response)
 {
     QueueEntry *entry = calloc(1, sizeof(QueueEntry));
+    entry->client = client;
     entry->seqnum = seqnum;
     entry->command = command;
     entry->success = success;

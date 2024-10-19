@@ -1,8 +1,8 @@
 #include <reef.h>
 
 #include "global.h"
-#include "callback.h"
 #include "mnet.h"
+#include "callback.h"
 #include "packet.h"
 #include "client.h"
 #include "server.h"

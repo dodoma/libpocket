@@ -8,7 +8,7 @@
  */
 
 #define LEN_CPUID 14
-#define LEN_PACKET_NORMAL 512
+#define LEN_PACKET_NORMAL 1024
 #define CONTRL_PACKET_MAX_LEN 10485760
 #define PORT_BROADCAST_DST 4102
 
@@ -38,6 +38,10 @@ typedef struct _msource_node {
     char id[LEN_CPUID];
     char *ip;
 
+    MDF *dbnode;
+    char *storename;
+    char *storepath;
+
     NetNode contrl;
     NetNode binary;
 
@@ -46,11 +50,13 @@ typedef struct _msource_node {
     struct _msource_node *next;
 } MsourceNode;
 
+typedef void (*CONTRL_CALLBACK)(NetNode *client, bool success, char *errmsg, char *response);
+
 /*
  * 启动网络监控线程
  * 调且仅能调用一次
  */
-bool mnetStart();
+bool mnetStart(const char *appdir);
 
 /* 查找本地设备
  * 若无，持续等待
@@ -86,6 +92,9 @@ bool mnetPlay(char *id);
 bool mnetPause(char *id);
 bool mnetResume(char *id);
 bool mnetNext(char *id);
+
+bool mnetStoreList(char *id, CONTRL_CALLBACK callback);
+bool mnetSync(char *id, char *storename);
 
 char* mnetDiscover2();
 

@@ -19,21 +19,30 @@ typedef enum {
 
     FRAME_HARDWARE,        /* 音源控制相关 */
     FRAME_AUDIO,           /* 播放相关 */
+    FRAME_STORAGE
 } FRAME_TYPE;
 
 typedef enum {
     CMD_BROADCAST = 0,
-    CMD_PLAY,                   /* 播放（指定媒体文件，或者随机） */
-    CMD_PLAY_INFO,              /* 查询当前播放信息 */
-    CMD_STORE_SWITCH,           /* 切换媒体库 */
-    CMD_PAUSE,
-    CMD_RESUME,
-    CMD_NEXT,
+    CMD_STORE_LIST,
 } COMMAND_CMD;
 
 typedef enum {
     CMD_WIFI_SET = 0,
 } COMMAND_HDARDWAR;
+
+typedef enum {
+    CMD_PLAY = 0,               /* 播放（指定媒体文件，或者随机） */
+    CMD_PLAY_INFO,              /* 查询当前播放信息 */
+    CMD_PAUSE,
+    CMD_RESUME,
+    CMD_NEXT,
+    CMD_STORE_SWITCH,           /* 切换媒体库 */
+} COMMAND_AUDIO;
+
+typedef enum {
+    CMD_DB_MD5 = 0,
+} COMMAND_STORAGE;
 
 typedef enum {
     SEQ_RESERVE = 0,
@@ -65,6 +74,7 @@ typedef struct {
 
 size_t packetPINGFill(uint8_t *buf, size_t buflen);
 size_t packetPONGFill(uint8_t *buf, size_t buflen);
+size_t packetIdiotFill(uint8_t *buf, IDIOT_INDICATOR idiot);
 
 /*
  * message packet 3 steps:
@@ -79,6 +89,8 @@ size_t packetBroadcastFill(MessagePacket *packet,
                            const char *cpuid, uint16_t port_contrl, uint16_t port_binary);
 size_t packetACKFill(MessagePacket *packet, uint16_t seqnum, uint16_t command,
                      bool success, const char *errmsg);
+size_t packetResponseFill(MessagePacket *packet, uint16_t seqnum, uint16_t command,
+                          bool success, const char *errmsg, MDF *datanode);
 size_t packetDataFill(MessagePacket *packet, FRAME_TYPE type, uint16_t cmd, MDF *datanode); /* -_-! */
 size_t packetNODataFill(MessagePacket *packet, FRAME_TYPE type, uint16_t command);
 
