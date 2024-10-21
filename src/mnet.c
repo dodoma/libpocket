@@ -555,27 +555,50 @@ bool mnetStoreList(char *id, CONTRL_CALLBACK callback)
     return true;
 }
 
+static bool _sync_database(void *arg);
 static void _on_database_check(NetNode *client, bool success, char *errmsg, char *response)
 {
+    CtlNode *contrl = (CtlNode*)client;
     if (success) {
         /* db 没有变化，直接同步数据 */
+        TINY_LOG("db ok, build sync list...");
+
 #if 0
-        MLIST *synclist = mfileBuildSynclist(client);
-        char *file;
+        MLIST *synclist = mfileBuildSynclist(contrl->base.upnode);
+
+        SyncFile *file
         MLIST_ITERATE(synclist, file) {
             MDF *datanode;
             mdf_init(&datanode);
-            mdf_set_value(datanode, "file", file);
-            MessagePacket *packet = packetMessageInit(client->bufsend, LEN_PACKET_NORMAL);
+            mdf_set_value(datanode, "name", file->name);
+            mdf_set_int_value(datanode, "type", file->type);
+            /* 只有完成传送的文件才会正常命名，故此处不用再做size和checksum比较 */
+
+            MessagePacket *packet = packetMessageInit(contrl->bufsend, LEN_PACKET_NORMAL);
             size_t sendlen = packetDataFill(packet, FRAME_STORAGE, CMD_SYNC_PULL, datanode);
             packetCRCFill(packet);
             mdf_destroy(&datanode);
 
-            SSEND(client->fd, client->bufsend, sendlen);
+            SSEND(contrl->base.fd, contrl->bufsend, sendlen);
         }
+
+        mlist_destroy(&synclist);
 #endif
+        MDF *datanode;
+        mdf_init(&datanode);
+        mdf_set_value(datanode, "name", "fdf1ff08ed");
+        mdf_set_int_value(datanode, "type", 1);
+        MessagePacket *packet = packetMessageInit(contrl->bufsend, LEN_PACKET_NORMAL);
+        size_t sendlen = packetDataFill(packet, FRAME_STORAGE, CMD_SYNC_PULL, datanode);
+        packetCRCFill(packet);
+        mdf_destroy(&datanode);
+
+        SSEND(contrl->base.fd, contrl->bufsend, sendlen);
     } else {
-        /* 等待 music.db 接受完成后同步数据 */
+        /* 等待 music.db 接收完成后同步数据 */
+        TINY_LOG("db nok %s", errmsg);
+
+        g_timers = timerAdd(g_timers, 13, false, contrl->base.upnode, _sync_database);
     }
 }
 
@@ -584,27 +607,10 @@ int _store_compare(const void *anode, void *key)
     return strcmp(mdf_get_value((MDF*)anode, "name", ""), (char*)key);
 }
 
-bool mnetStoreSync(char *id, char *storename)
+static bool _sync_database(void *arg)
 {
-    if (!id || !storename) return false;
-
-    MsourceNode *item = _source_find(m_sources, id);
-    if (!item) return false;
-
+    MsourceNode *item = (MsourceNode*)arg;
     CtlNode *node = &item->contrl;
-
-    MDF *snode = mdf_search(item->dbnode, storename, _store_compare);
-    if (!snode) {
-        TINY_LOG("find store %s failure", storename);
-        //MDF_TRACE(item->dbnode);
-        return false;
-    }
-
-    item->storename = mdf_get_value(snode, "name", NULL);
-    item->storepath = mdf_get_value(snode, "path", NULL);
-    if (!item->storename || !item->storepath) return false;
-
-    mos_mkdirf(0755, "%s/%s/%s", m_appdir, item->id, item->storepath);
 
     MDF *datanode;
     mdf_init(&datanode);
@@ -629,6 +635,33 @@ bool mnetStoreSync(char *id, char *storename)
     SSEND(node->base.fd, node->bufsend, sendlen);
 
     mdf_destroy(&datanode);
+
+    return false;
+}
+
+bool mnetStoreSync(char *id, char *storename)
+{
+    if (!id || !storename) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    MDF *snode = mdf_search(item->dbnode, storename, _store_compare);
+    if (!snode) {
+        TINY_LOG("find store %s failure", storename);
+        //MDF_TRACE(item->dbnode);
+        return false;
+    }
+
+    item->storename = mdf_get_value(snode, "name", NULL);
+    item->storepath = mdf_get_value(snode, "path", NULL);
+    if (!item->storename || !item->storepath) return false;
+
+    mos_mkdirf(0755, "%s/%s/tmp", m_appdir, item->id);
+    mos_mkdirf(0755, "%s/%s/assets/cover", m_appdir, item->id);
+    mos_mkdirf(0755, "%s/%s/%s", m_appdir, item->id, item->storepath);
+
+    _sync_database(item);
 
     return true;
 }
@@ -659,7 +692,7 @@ static void _on_store_list(NetNode *client, bool success, char *errmsg, char *re
 }
 
 
-static void _on_playing(bool success, char *errmsg, char *response)
+static void _on_playing(NetNode *client, bool success, char *errmsg, char *response)
 {
     TINY_LOG("on RESPONSE %d %s %s", success, errmsg, response);
 }
@@ -671,9 +704,10 @@ int main(int argc, char *argv[])
     char *id = mnetDiscovery();
 
     TINY_LOG("%s", id);
+    //mnetWifiSet("a4204428f3063", "TPLINK_2323", "123123", "No.419", _on_wifi_setted);
 
     //sleep(5);
-    //mnetWifiSet("a4204428f3063", "TPLINK_2323", "123123", "No.419", _on_wifi_setted);
+    //mnetPlayInfo("a4204428f3063", _on_playing);
     //mnetPlay("a4204428f3063");
 
     sleep(5);

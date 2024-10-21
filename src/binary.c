@@ -29,6 +29,9 @@ static bool _parse_packet(BinNode *client, MessagePacket *packet)
          */
         if (packet->command == CMD_SYNC) {
             /* 文件需要下载 */
+            memset(client->tempname, 0x0, sizeof(client->tempname));
+            memset(client->filename, 0x0, sizeof(client->filename));
+
             uint8_t *buf = packet->data;
             int slen = strlen((char*)buf);
             if (slen >= PATH_MAX) {
@@ -36,19 +39,31 @@ static bool _parse_packet(BinNode *client, MessagePacket *packet)
                 break;
             }
 
-            char filename[PATH_MAX] = {0};
-            snprintf(filename, sizeof(filename), "%s/%s/%s", mnetAppDir(), source->id, (char*)buf);
+            snprintf(client->filename, sizeof(client->filename),
+                     "%s/%s/%s", mnetAppDir(), source->id, (char*)buf);
             buf += slen;
             buf++;              /* '\0' */
 
             client->binlen = *(uint64_t*)buf;
             buf += 8;
 
-            TINY_LOG("SYNC %s with %lu bytes...", filename, client->binlen);
+            TINY_LOG("SYNC %s with %lu bytes...", client->filename, client->binlen);
 
-            client->fpbin = fopen(filename, "wb");
+            remove(client->filename);
+
+            snprintf(client->tempname, sizeof(client->tempname),
+                     "%s/%s/tmp/pocket.XXXXXX", mnetAppDir(), source->id);
+            int fd = mkstemp(client->tempname);
+            if (fd < 0) {
+                TINY_LOG("unable to create file %s", client->tempname);
+                break;
+            }
+
+            /* TODO record tempname <==> filename to 断网续传 */
+
+            client->fpbin = fdopen(fd, "wb");
             if (!client->fpbin) {
-                TINY_LOG("create file %s failure %s", filename, strerror(errno));
+                TINY_LOG("create file %s failure %s", client->tempname, strerror(errno));
                 break;
             }
         }
@@ -95,6 +110,9 @@ static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
                 TINY_LOG("SYNC done.");
                 fclose(client->fpbin);
                 client->fpbin = NULL;
+                if (link(client->tempname, client->filename) != 0)
+                    TINY_LOG("link %s failure %s", client->filename, strerror(errno));
+                unlink(client->tempname);
             }
             return true;
         } else {
@@ -111,6 +129,9 @@ static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
             TINY_LOG("SYNC done.");
             fclose(client->fpbin);
             client->fpbin = NULL;
+            if (link(client->tempname, client->filename) != 0)
+                TINY_LOG("link %s failure %s", client->filename, strerror(errno));
+            unlink(client->tempname);
 
             size_t exceed = recvlen - client->binlen;
             memmove(recvbuf, recvbuf + client->binlen, exceed);

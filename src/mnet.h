@@ -50,6 +50,9 @@ typedef struct {
     uint8_t *bufrecv;
     size_t recvlen;
 
+    char tempname[PATH_MAX];
+    char filename[PATH_MAX];
+
     FILE *fpbin;
     uint64_t binlen;
 } BinNode;

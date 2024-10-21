@@ -59,8 +59,7 @@ static bool _parse_packet(CtlNode *client, MessagePacket *packet)
             int msglen = strlen((char*)buf);
             if (packet->length != LEN_HEADER + 1 + msglen + 1 + 4) {
                 TINY_LOG("ack msg error %d %d", packet->length, msglen);
-                errmsg = strdup((char*)buf);
-            }
+            } else errmsg = strdup((char*)buf);
         }
 
         callbackOn((NetNode*)client, packet->seqnum, packet->command, ok, errmsg, NULL);
