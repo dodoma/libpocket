@@ -4,11 +4,12 @@
 #include "mnet.h"
 #include "callback.h"
 #include "client.h"
+#include "binary.h"
 #include "packet.h"
 
 static uint8_t *m_recvbuf = NULL;
 
-static bool _parse_packet(CtlNode *client, MessagePacket *packet)
+static bool _parse_packet(BinNode *client, MessagePacket *packet)
 {
     uint8_t *buf = packet->data;
     char *errmsg = NULL;
@@ -21,88 +22,36 @@ static bool _parse_packet(CtlNode *client, MessagePacket *packet)
         /*
          * 0 1 2 3 4 5 6 7 8
          * /---------------\
-         * n   clientid    n
+         * n   filename    n
          * |      \0       |
+         * 8   filesize    8
          * \---------------/
          */
-        if (packet->command == CMD_CONNECT) {
-            /* 往 binary fd 发送 connect 命令，绑定至 contrl fd */
+        if (packet->command == CMD_SYNC) {
+            /* 文件需要下载 */
             uint8_t *buf = packet->data;
-            int idlen = strlen((char*)buf);
-            strncpy(source->myid, (char*)buf, idlen > LEN_CLIENTID ? LEN_CLIENTID: idlen);
-            buf += idlen;
+            int slen = strlen((char*)buf);
+            if (slen >= PATH_MAX) {
+                TINY_LOG("filename too loooong");
+                break;
+            }
+
+            char filename[PATH_MAX] = {0};
+            snprintf(filename, sizeof(filename), "%s/%s/%s", mnetAppDir(), source->id, (char*)buf);
+            buf += slen;
             buf++;              /* '\0' */
 
-            char bufsend[LEN_PACKET_NORMAL] = {0};
+            client->binlen = *(uint64_t*)buf;
+            buf += 8;
 
-            MessagePacket *outpacket = packetMessageInit(bufsend, LEN_PACKET_NORMAL);
-            size_t sendlen = packetConnectFill(outpacket, source->myid);
-            packetCRCFill(outpacket);
+            TINY_LOG("SYNC %s with %lu bytes...", filename, client->binlen);
 
-            send(source->binary.base.fd, bufsend, sendlen, MSG_NOSIGNAL);
-        }
-        break;
-    }
-    /*
-     * 0 1 2 3 4 5 6 7 8
-     * /---------------\
-     * |   success     |
-     * ...  errmsg   ...
-     * |      \0       |
-     * \---------------/
-     */
-    case FRAME_ACK:
-    {
-        bool ok = *buf; buf++;
-
-        if (packet->length > LEN_HEADER + 1 + 4) {
-            int msglen = strlen((char*)buf);
-            if (packet->length != LEN_HEADER + 1 + msglen + 1 + 4) {
-                TINY_LOG("ack msg error %d %d", packet->length, msglen);
-                errmsg = strdup((char*)buf);
-            }
-        }
-
-        callbackOn((NetNode*)client, packet->seqnum, packet->command, ok, errmsg, NULL);
-        break;
-    }
-    /*
-     * 0 1 2 3 4 5 6 7 8
-     * /---------------\
-     * |   success     |
-     * ...  errmsg   ...
-     * |      \0       |
-     * ... message pack ...
-     * \---------------/
-     */
-    case FRAME_RESPONSE:
-    {
-        int msglen = 0;
-        bool ok = *buf; buf++;
-
-        if (*buf != 0) {
-            msglen = strlen((char*)buf);
-            errmsg = strdup((char*)buf);
-            buf += msglen;
-            buf++;
-        }
-        buf++;
-
-        MDF *datanode;
-        mdf_init(&datanode);
-        if (packet->length > LEN_HEADER + 1 + msglen + 1 + 4) {
-            if (mdf_mpack_deserialize(datanode, buf,
-                                      packet->length - (LEN_HEADER + 1 + msglen + 1 + 4)) <= 0) {
-                TINY_LOG("message pack deserialize failure");
-                if (errmsg) free(errmsg);
+            client->fpbin = fopen(filename, "wb");
+            if (!client->fpbin) {
+                TINY_LOG("create file %s failure %s", filename, strerror(errno));
                 break;
             }
         }
-
-        char *response = mdf_json_export_string(datanode);
-        mdf_destroy(&datanode);
-
-        callbackOn((NetNode*)client, packet->seqnum, packet->command, ok, errmsg, response);
         break;
     }
     default:
@@ -113,7 +62,7 @@ static bool _parse_packet(CtlNode *client, MessagePacket *packet)
     return true;
 }
 
-static bool _parse_recv(CtlNode *client, uint8_t *recvbuf, size_t recvlen)
+static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
 {
 #define PARTLY_PACKET                                               \
     do {                                                            \
@@ -125,6 +74,51 @@ static bool _parse_recv(CtlNode *client, uint8_t *recvbuf, size_t recvlen)
         return true;                                                \
     } while (0)
 
+    /* 二进制文件内容 */
+    while (client->fpbin && client->binlen > 0) {
+        size_t writelen = 0;
+
+        if (recvlen <= client->binlen) {
+            /* 收到的内容仅够此次吃喝 */
+            writelen = fwrite(recvbuf, 1, recvlen, client->fpbin);
+            TINY_LOG("%ju bytes write", writelen);
+            if (writelen < recvlen) {
+                mtc_mt_warn("write error %s", strerror(errno));
+                fclose(client->fpbin);
+                client->fpbin = NULL;
+                client->binlen = 0;
+                break;
+            }
+            client->binlen -= writelen;
+            if (client->binlen == 0) {
+                /* 文件传送完成 */
+                TINY_LOG("SYNC done.");
+                fclose(client->fpbin);
+                client->fpbin = NULL;
+            }
+            return true;
+        } else {
+            /* 收到的内容比需要保存的文件内容多 */
+            writelen = fwrite(recvbuf, 1, client->binlen, client->fpbin);
+            TINY_LOG("%ju bytes write", writelen);
+            if (writelen < client->binlen) {
+                mtc_mt_warn("write error %s", strerror(errno));
+                fclose(client->fpbin);
+                client->fpbin = NULL;
+                client->binlen = 0;
+                break;
+            }
+            TINY_LOG("SYNC done.");
+            fclose(client->fpbin);
+            client->fpbin = NULL;
+
+            size_t exceed = recvlen - client->binlen;
+            memmove(recvbuf, recvbuf + client->binlen, exceed);
+            client->binlen = 0;
+            return _parse_recv(client, recvbuf, exceed);
+        }
+    }
+
     if (recvlen < LEN_IDIOT) PARTLY_PACKET;
 
     IdiotPacket *ipacket = packetIdiotGot(recvbuf, recvlen);
@@ -135,9 +129,6 @@ static bool _parse_recv(CtlNode *client, uint8_t *recvbuf, size_t recvlen)
         case IDIOT_PONG:
             //TINY_LOG("pong received");
             client->base.pong = g_ctime;
-            break;
-        case IDIOT_PLAY_STEP:
-            callbackOn((NetNode*)client, SEQ_PLAY_STEP, 0, true, NULL, NULL);
             break;
         default:
             TINY_LOG("unsupport idot packet %d", ipacket->idiot);
@@ -179,12 +170,12 @@ static bool _parse_recv(CtlNode *client, uint8_t *recvbuf, size_t recvlen)
 #undef PARTLY_PACKET
 }
 
-void clientInit()
+void binaryInit()
 {
     if (!m_recvbuf) m_recvbuf = calloc(1, CONTRL_PACKET_MAX_LEN);
 }
 
-void clientRecv(int sfd, CtlNode *client)
+void binaryRecv(int sfd, BinNode *client)
 {
     int rv;
 
@@ -197,7 +188,7 @@ void clientRecv(int sfd, CtlNode *client)
         if (rv < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             return;
         } else if (rv <= 0) {
-            serverClosed(client);
+            serverBinClosed(client);
             return;
         }
 
@@ -212,7 +203,7 @@ void clientRecv(int sfd, CtlNode *client)
         if (rv < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             return;
         } else if (rv <= 0) {
-            serverClosed(client);
+            serverBinClosed(client);
             return;
         }
 
@@ -223,7 +214,7 @@ void clientRecv(int sfd, CtlNode *client)
     }
 }
 
-void serverClosed(CtlNode *client)
+void serverBinClosed(BinNode *client)
 {
     if (!client) return;
 

@@ -5,6 +5,7 @@
 #include "callback.h"
 #include "packet.h"
 #include "client.h"
+#include "binary.h"
 #include "server.h"
 
 #define HEARTBEAT_PERIOD 20
@@ -17,7 +18,7 @@ pthread_t m_worker;
 MsourceNode *m_sources = NULL;
 
 bool g_dumpsend = false;
-bool g_dumprecv = false;
+bool g_dumprecv = true;
 
 static char *m_appdir = NULL;
 
@@ -33,47 +34,52 @@ static bool _keep_heartbeat(void *data)
     uint8_t sendbuf[256] = {0};
     size_t sendlen = packetPINGFill(sendbuf, sizeof(sendbuf));
 
-    if (!item->contrl.online) {
+    CtlNode *contrl = &item->contrl;
+    BinNode *binary = &item->binary;
+
+    if (!contrl->base.online) {
         /* 如果已经断连，仅尝试重连 */
-        if (g_ctime > item->contrl.pong && g_ctime - item->contrl.pong > RECONNECT_TIMEOUT) {
+        if (g_ctime > contrl->base.pong && g_ctime - contrl->base.pong > RECONNECT_TIMEOUT) {
             TINY_LOG("reconnect to %s", item->id);
 
-            item->contrl.pong = g_ctime;
-            serverConnect(&item->contrl);
+            contrl->base.pong = g_ctime;
+            serverConnect((NetNode*)&item->contrl);
         }
     } else {
         /* 链接正常，进行心跳保持和通畅判断 */
-        if (g_ctime > item->contrl.pong && g_ctime - item->contrl.pong > HEARTBEAT_TIMEOUT) {
-            TINY_LOG("connection lost on timeout %d", item->contrl.fd);
+        if (g_ctime > contrl->base.pong && g_ctime - contrl->base.pong > HEARTBEAT_TIMEOUT) {
+            TINY_LOG("connection lost on timeout %d", contrl->base.fd);
             /* 当然，遗失的心跳，也可能网络畅通，但服务器没回 PONG 包 */
 
-            item->contrl.online = false;
-            item->contrl.pong = g_ctime;
+            contrl->base.online = false;
+            contrl->base.pong = g_ctime;
 
-            callbackOn(&item->contrl, SEQ_CONNECTION_LOST, 0, false, strdup(item->id), NULL);
+            callbackOn((NetNode*)&item->contrl, SEQ_CONNECTION_LOST,
+                       0, false, strdup(item->id), NULL);
         } else {
-            send(item->contrl.fd, sendbuf, sendlen, MSG_NOSIGNAL);
+            send(contrl->base.fd, sendbuf, sendlen, MSG_NOSIGNAL);
             //MSG_LOG("SEND: ", sendbuf, sendlen);
         }
     }
 
-    if (!item->binary.online) {
-        if (g_ctime > item->binary.pong && g_ctime - item->binary.pong > RECONNECT_TIMEOUT) {
-            //TINY_LOG("reconnect to %s", item->id);
+    if (!binary->base.online) {
+        if (g_ctime > binary->base.pong && g_ctime - binary->base.pong > RECONNECT_TIMEOUT) {
+            TINY_LOG("reconnect to %s", item->id);
 
-            item->binary.pong = g_ctime;
-            //serverConnect(&item->binary);
+            binary->base.pong = g_ctime;
+            serverConnect((NetNode*)&item->binary);
         }
     } else {
-        if (g_ctime > item->binary.pong && g_ctime - item->binary.pong > HEARTBEAT_TIMEOUT) {
-            TINY_LOG("connection lost on timeout %d", item->binary.fd);
+        if (g_ctime > binary->base.pong && g_ctime - binary->base.pong > HEARTBEAT_TIMEOUT) {
+            TINY_LOG("connection lost on timeout %d", binary->base.fd);
 
-            item->binary.online = false;
-            item->binary.pong = g_ctime;
+            binary->base.online = false;
+            binary->base.pong = g_ctime;
 
-            callbackOn(&item->binary, SEQ_CONNECTION_LOST, 1, false, strdup(item->id), NULL);
+            callbackOn((NetNode*)&item->binary, SEQ_CONNECTION_LOST,
+                       1, false, strdup(item->id), NULL);
         } else {
-            send(item->binary.fd, sendbuf, sendlen, MSG_NOSIGNAL);
+            send(binary->base.fd, sendbuf, sendlen, MSG_NOSIGNAL);
             //MSG_LOG("SEND: ", sendbuf, sendlen);
         }
     }
@@ -133,15 +139,15 @@ static void* el_routine(void *arg)
 
         MsourceNode *item = m_sources;
         while (item) {
-            if (item->contrl.fd > maxfd) maxfd = item->contrl.fd;
-            if (item->binary.fd > maxfd) maxfd = item->binary.fd;
-            if (item->contrl.online && item->contrl.fd > 0) {
-                //TINY_LOG("add contrl fd %d", item->contrl.fd);
-                FD_SET(item->contrl.fd, &readset);
+            if (item->contrl.base.fd > maxfd) maxfd = item->contrl.base.fd;
+            if (item->binary.base.fd > maxfd) maxfd = item->binary.base.fd;
+            if (item->contrl.base.online && item->contrl.base.fd > 0) {
+                //TINY_LOG("add contrl fd %d", item->contrl.base.fd);
+                FD_SET(item->contrl.base.fd, &readset);
             }
-            if (item->binary.online && item->binary.fd > 0) {
-                //TINY_LOG("add binary fd %d", item->binary.fd);
-                FD_SET(item->binary.fd, &readset);
+            if (item->binary.base.online && item->binary.base.fd > 0) {
+                //TINY_LOG("add binary fd %d", item->binary.base.fd);
+                FD_SET(item->binary.base.fd, &readset);
             }
 
             item = item->next;
@@ -159,13 +165,13 @@ static void* el_routine(void *arg)
         item = m_sources;
         while (item) {
             if (item->pos == MNET_ONLINE_TIMER) {
-                if (FD_ISSET(item->contrl.fd, &readset)) _timer_handler(item->contrl.fd);
+                if (FD_ISSET(item->contrl.base.fd, &readset)) _timer_handler(item->contrl.base.fd);
             } else if (item->pos == MNET_ONLINE_LAN) {
-                if (item->contrl.online && FD_ISSET(item->contrl.fd, &readset)) {
-                    clientRecv(item->contrl.fd, &item->contrl);
+                if (item->contrl.base.online && FD_ISSET(item->contrl.base.fd, &readset)) {
+                    clientRecv(item->contrl.base.fd, &item->contrl);
                 }
-                if (item->binary.online && FD_ISSET(item->binary.fd, &readset)) {
-                    //clientRecv(item->binary.fd, &item->binary);
+                if (item->binary.base.online && FD_ISSET(item->binary.base.fd, &readset)) {
+                    binaryRecv(item->binary.base.fd, &item->binary);
                 }
             }
 
@@ -184,6 +190,7 @@ bool mnetStart(const char *homedir)
     if (homedir) m_appdir = strdup(homedir);
 
     clientInit();
+    binaryInit();
     callbackStart();
 
 #define RETURN(ret)                             \
@@ -199,23 +206,23 @@ bool mnetStart(const char *homedir)
     mdf_init(&item->dbnode);
     item->storename = NULL;
     item->storepath = NULL;
-    item->contrl.fd = -1;
-    item->binary.fd = -1;
-    item->contrl.online = true;
+    item->contrl.base.fd = -1;
+    item->binary.base.fd = -1;
+    item->contrl.base.online = true;
     item->pos = MNET_ONLINE_TIMER;
 
-    item->contrl.fd = timerfd_create(CLOCK_REALTIME, 0);
-    if (item->contrl.fd == -1) {
+    item->contrl.base.fd = timerfd_create(CLOCK_REALTIME, 0);
+    if (item->contrl.base.fd == -1) {
         TINY_LOG("create timer failure");
         RETURN(false);
-    } else TINY_LOG("timer fd %d", item->contrl.fd);
+    } else TINY_LOG("timer fd %d", item->contrl.base.fd);
 
     struct itimerspec new_value;
     new_value.it_value.tv_sec = 1;
     new_value.it_value.tv_nsec = 0;
     new_value.it_interval.tv_sec = 1;
     new_value.it_interval.tv_nsec = 0;
-    if (timerfd_settime(item->contrl.fd, 0, &new_value, NULL) == -1) {
+    if (timerfd_settime(item->contrl.base.fd, 0, &new_value, NULL) == -1) {
         TINY_LOG("set time failure");
         RETURN(false);
     }
@@ -229,6 +236,12 @@ bool mnetStart(const char *homedir)
 
     return true;
 }
+
+char* mnetAppDir()
+{
+    return m_appdir;
+}
+
 
 /*
  * 收到了音源广播包，尝试与其建立链接，并将链接后的网络信息加入监听范围
@@ -252,31 +265,43 @@ static bool _onbroadcast(char cpuid[LEN_CPUID], char ip[INET_ADDRSTRLEN],
     mdf_init(&item->dbnode);
     item->storename = NULL;
     item->storepath = NULL;
-    item->contrl.fd = -1;
-    item->contrl.online = false;
-    item->contrl.port = port_contrl;
-    item->contrl.pong = g_ctime;
+    item->contrl.base.fd = -1;
+    item->contrl.base.online = false;
+    item->contrl.base.port = port_contrl;
+    item->contrl.base.pong = g_ctime;
+    item->contrl.base.ctype = CLIENT_CONTRL;
+    item->contrl.base.upnode = item;
+    //
     item->contrl.bufrecv = NULL;
     item->contrl.recvlen = 0;
-    item->contrl.upnode = item;
 
-    item->binary.fd = -1;
-    item->binary.online = false;
-    item->binary.port = port_binary;
-    item->binary.pong = g_ctime;
+    item->binary.base.fd = -1;
+    item->binary.base.online = false;
+    item->binary.base.port = port_binary;
+    item->binary.base.pong = g_ctime;
+    item->binary.base.ctype = CLIENT_BINARY;
+    item->binary.base.upnode = item;
+    //
     item->binary.bufrecv = NULL;
     item->binary.recvlen = 0;
-    item->binary.upnode = item;
+    item->binary.fpbin = NULL;
+    item->binary.binlen = 0;
 
     item->pos = MNET_ONLINE_LAN;
 
-    if (!serverConnect(&item->contrl)) RETURN(false);
+    if (!serverConnect((NetNode*)&item->contrl)) RETURN(false);
 
-    if (!serverConnect(&item->binary)) RETURN(false);
+    if (!serverConnect((NetNode*)&item->binary)) RETURN(false);
+
+    /* 给俺分配个ID，方便你关联 contrl 和 binary */
+    uint8_t sendbuf[LEN_IDIOT] = {0};
+    size_t sendlen = packetIdiotFill(sendbuf, IDIOT_CONNECT);
+    send(item->contrl.base.fd, sendbuf, sendlen, MSG_NOSIGNAL);
+    MSG_LOG(g_dumpsend, "SEND: ", sendbuf, sendlen);
 
     g_timers = timerAdd(g_timers, HEARTBEAT_PERIOD, true, item, _keep_heartbeat);
 
-    TINY_LOG("%s contrl fd %d, binary fd %d", cpuid, item->contrl.fd, item->binary.fd);
+    TINY_LOG("%s contrl fd %d, binary fd %d", cpuid, item->contrl.base.fd, item->binary.base.fd);
 
     item->next = m_sources;
     m_sources = item;
@@ -383,7 +408,7 @@ bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name,
         return false;
     }
 
-    NetNode *node = &item->contrl;
+    CtlNode *node = &item->contrl;
 
     MDF *datanode;
     mdf_init(&datanode);
@@ -401,7 +426,7 @@ bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name,
     packetCRCFill(packet);
     if (callback) callbackRegist(packet->seqnum, packet->command, callback);
 
-    SSEND(node->fd, node->bufsend, sendlen);
+    SSEND(node->base.fd, node->bufsend, sendlen);
 
     mdf_destroy(&datanode);
 
@@ -415,7 +440,7 @@ bool mnetPlayInfo(char *id, CONTRL_CALLBACK callback)
     MsourceNode *item = _source_find(m_sources, id);
     if (!item) return false;
 
-    NetNode *node = &item->contrl;
+    CtlNode *node = &item->contrl;
 
     MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
     packet->seqnum = SEQ_PLAY_INFO;
@@ -424,7 +449,7 @@ bool mnetPlayInfo(char *id, CONTRL_CALLBACK callback)
 
     callbackRegist(packet->seqnum, packet->command, callback);
 
-    SSEND(node->fd, node->bufsend, sendlen);
+    SSEND(node->base.fd, node->bufsend, sendlen);
 
     return true;
 }
@@ -445,13 +470,13 @@ bool mnetPlay(char *id)
     MsourceNode *item = _source_find(m_sources, id);
     if (!item) return false;
 
-    NetNode *node = &item->contrl;
+    CtlNode *node = &item->contrl;
 
     MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
     size_t sendlen = packetNODataFill(packet, FRAME_AUDIO, CMD_PLAY);
     packetCRCFill(packet);
 
-    SSEND(node->fd, node->bufsend, sendlen);
+    SSEND(node->base.fd, node->bufsend, sendlen);
 
     return true;
 }
@@ -463,13 +488,13 @@ bool mnetPause(char *id)
     MsourceNode *item = _source_find(m_sources, id);
     if (!item) return false;
 
-    NetNode *node = &item->contrl;
+    CtlNode *node = &item->contrl;
 
     MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
     size_t sendlen = packetNODataFill(packet, FRAME_AUDIO, CMD_PAUSE);
     packetCRCFill(packet);
 
-    SSEND(node->fd, node->bufsend, sendlen);
+    SSEND(node->base.fd, node->bufsend, sendlen);
 
     return true;
 }
@@ -481,13 +506,13 @@ bool mnetResume(char *id)
     MsourceNode *item = _source_find(m_sources, id);
     if (!item) return false;
 
-    NetNode *node = &item->contrl;
+    CtlNode *node = &item->contrl;
 
     MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
     size_t sendlen = packetNODataFill(packet, FRAME_AUDIO, CMD_RESUME);
     packetCRCFill(packet);
 
-    SSEND(node->fd, node->bufsend, sendlen);
+    SSEND(node->base.fd, node->bufsend, sendlen);
 
     return true;
 }
@@ -499,13 +524,13 @@ bool mnetNext(char *id)
     MsourceNode *item = _source_find(m_sources, id);
     if (!item) return false;
 
-    NetNode *node = &item->contrl;
+    CtlNode *node = &item->contrl;
 
     MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
     size_t sendlen = packetNODataFill(packet, FRAME_AUDIO, CMD_NEXT);
     packetCRCFill(packet);
 
-    SSEND(node->fd, node->bufsend, sendlen);
+    SSEND(node->base.fd, node->bufsend, sendlen);
 
     return true;
 }
@@ -517,7 +542,7 @@ bool mnetStoreList(char *id, CONTRL_CALLBACK callback)
     MsourceNode *item = _source_find(m_sources, id);
     if (!item) return false;
 
-    NetNode *node = &item->contrl;
+    CtlNode *node = &item->contrl;
 
     MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
     size_t sendlen = packetNODataFill(packet, FRAME_CMD, CMD_STORE_LIST);
@@ -525,7 +550,7 @@ bool mnetStoreList(char *id, CONTRL_CALLBACK callback)
 
     callbackRegist(packet->seqnum, packet->command, callback);
 
-    SSEND(node->fd, node->bufsend, sendlen);
+    SSEND(node->base.fd, node->bufsend, sendlen);
 
     return true;
 }
@@ -566,7 +591,7 @@ bool mnetStoreSync(char *id, char *storename)
     MsourceNode *item = _source_find(m_sources, id);
     if (!item) return false;
 
-    NetNode *node = &item->contrl;
+    CtlNode *node = &item->contrl;
 
     MDF *snode = mdf_search(item->dbnode, storename, _store_compare);
     if (!snode) {
@@ -601,7 +626,7 @@ bool mnetStoreSync(char *id, char *storename)
 
     callbackRegist(packet->seqnum, packet->command, _on_database_check);
 
-    SSEND(node->fd, node->bufsend, sendlen);
+    SSEND(node->base.fd, node->bufsend, sendlen);
 
     mdf_destroy(&datanode);
 

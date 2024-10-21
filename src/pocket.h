@@ -35,13 +35,15 @@ void TINY_LOG(const char* fmt, ...);
     } while(0)
 #endif  /* ANDROID */
 
-#define MSG_LOG(noise, pre, p, psize)                           \
-    do {                                                        \
-        if ((noise) && (ssize_t)(psize) > 0) {                  \
-            char zstra[(psize)*2+1];                            \
-            pocket_bin2hexstr((uint8_t*)(p), (psize), zstra);   \
-            TINY_LOG("%s%zu %s", pre, (size_t)(psize), zstra);  \
-        }                                                       \
+#define MSG_LOG(noise, pre, p, psize)                                   \
+    do {                                                                \
+        if ((noise) && (ssize_t)(psize) > 0) {                          \
+            int _msize = (psize) > 1024 ? 128 : (psize);                \
+            char zstra[(_msize)*2+1];                                   \
+            pocket_bin2hexstr((uint8_t*)(p), (_msize), zstra);          \
+            if ((psize) > 1024) {zstra[253] = zstra[254] = zstra[255] = '.';} \
+            TINY_LOG("%s%zu %s", pre, (size_t)(psize), zstra);          \
+        }                                                               \
     } while (0)
 
 /*

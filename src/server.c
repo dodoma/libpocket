@@ -45,11 +45,6 @@ bool serverConnect(NetNode *server)
     server->pong = g_ctime;
     server->online = true;
 
-    uint8_t sendbuf[256] = {0};
-    size_t sendlen = packetPINGFill(sendbuf, sizeof(sendbuf));
-    send(fd, sendbuf, sendlen, MSG_NOSIGNAL);
-    //MSG_LOG("SEND: ", sendbuf, sendlen);
-
     return true;
 #undef RETURN
 }
