@@ -2,6 +2,7 @@
 #define __MNET_H__
 
 #include "pocket.h"
+#include "domme.h"
 
 /*
  * mnet, 网络相关
@@ -64,8 +65,9 @@ typedef struct _msource_node {
     char myid[LEN_CLIENTID];    /* client id produced by node */
 
     MDF *dbnode;
-    char *storename;
-    char *storepath;
+
+    MLIST *needToSync;
+    DommeStore *plan;
 
     CtlNode contrl;
     BinNode binary;

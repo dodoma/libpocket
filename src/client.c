@@ -151,7 +151,7 @@ static bool _parse_recv(CtlNode *client, uint8_t *recvbuf, size_t recvlen)
         if (recvlen < LEN_HEADER + 1 + 4) PARTLY_PACKET;
 
         MessagePacket *packet = packetMessageGot(recvbuf, recvlen);
-        if (packet->sof == PACKET_SOF && packet->idiot == 1) {
+        if (packet && packet->sof == PACKET_SOF && packet->idiot == 1) {
             if (recvlen < packet->length) {
                 if (packet->length > CONTRL_PACKET_MAX_LEN) {
                     return false;

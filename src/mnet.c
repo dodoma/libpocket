@@ -2,6 +2,7 @@
 
 #include "global.h"
 #include "mnet.h"
+#include "mfile.h"
 #include "callback.h"
 #include "packet.h"
 #include "client.h"
@@ -18,7 +19,7 @@ pthread_t m_worker;
 MsourceNode *m_sources = NULL;
 
 bool g_dumpsend = false;
-bool g_dumprecv = true;
+bool g_dumprecv = false;
 
 static char *m_appdir = NULL;
 
@@ -187,7 +188,15 @@ bool mnetStart(const char *homedir)
     g_ctime = time(NULL);
     g_starton = g_ctime;
     g_elapsed = 0;
-    if (homedir) m_appdir = strdup(homedir);
+
+    if (homedir) {
+        int slen = strlen(homedir);
+        if (homedir[slen-1] != '/') {
+            char dirname[PATH_MAX];
+            snprintf(dirname, sizeof(dirname), "%s/", homedir);
+            m_appdir = strdup(dirname);
+        } else m_appdir = strdup(homedir);
+    }
 
     clientInit();
     binaryInit();
@@ -204,8 +213,6 @@ bool mnetStart(const char *homedir)
     memset(item, 0x0, sizeof(MsourceNode));
     item->ip = NULL;
     mdf_init(&item->dbnode);
-    item->storename = NULL;
-    item->storepath = NULL;
     item->contrl.base.fd = -1;
     item->binary.base.fd = -1;
     item->contrl.base.online = true;
@@ -263,8 +270,8 @@ static bool _onbroadcast(char cpuid[LEN_CPUID], char ip[INET_ADDRSTRLEN],
     memcpy(item->id, cpuid, LEN_CPUID);
     item->ip = strdup(ip);
     mdf_init(&item->dbnode);
-    item->storename = NULL;
-    item->storepath = NULL;
+    item->needToSync = NULL;
+    item->plan = NULL;
     item->contrl.base.fd = -1;
     item->contrl.base.online = false;
     item->contrl.base.port = port_contrl;
@@ -559,19 +566,37 @@ static bool _sync_database(void *arg);
 static void _on_database_check(NetNode *client, bool success, char *errmsg, char *response)
 {
     CtlNode *contrl = (CtlNode*)client;
+    MsourceNode *item = contrl->base.upnode;
+    DommeStore *plan = item->plan;
+
+    if (!item || !plan) return;
+
     if (success) {
         /* db 没有变化，直接同步数据 */
         TINY_LOG("db ok, build sync list...");
 
-#if 0
+        dommeStoreClear(plan);
+
+        char filename[PATH_MAX];
+        snprintf(filename, sizeof(filename), "%s%s/%smusic.db", m_appdir, item->id, plan->basedir);
+        MERR *err = dommeLoadFromFile(filename, plan);
+        if (err != MERR_OK) {
+            TINY_LOG("load db %s failure %s", filename, strerror(errno));
+            merr_destroy(&err);
+            return;
+        }
+
         MLIST *synclist = mfileBuildSynclist(contrl->base.upnode);
 
-        SyncFile *file
+        SyncFile *file;
         MLIST_ITERATE(synclist, file) {
             MDF *datanode;
             mdf_init(&datanode);
-            mdf_set_value(datanode, "name", file->name);
             mdf_set_int_value(datanode, "type", file->type);
+            if (file->name) mdf_set_value(datanode, "name", file->name);
+            if (file->id) mdf_set_value(datanode, "id", file->id);
+            if (file->artist) mdf_set_value(datanode, "artist", file->artist);
+            if (file->album) mdf_set_value(datanode, "album", file->album);
             /* 只有完成传送的文件才会正常命名，故此处不用再做size和checksum比较 */
 
             MessagePacket *packet = packetMessageInit(contrl->bufsend, LEN_PACKET_NORMAL);
@@ -579,21 +604,11 @@ static void _on_database_check(NetNode *client, bool success, char *errmsg, char
             packetCRCFill(packet);
             mdf_destroy(&datanode);
 
+            //TINY_LOG("pull %s %s %s %s", file->name, file->id, file->artist, file->album);
             SSEND(contrl->base.fd, contrl->bufsend, sendlen);
         }
 
         mlist_destroy(&synclist);
-#endif
-        MDF *datanode;
-        mdf_init(&datanode);
-        mdf_set_value(datanode, "name", "fdf1ff08ed");
-        mdf_set_int_value(datanode, "type", 1);
-        MessagePacket *packet = packetMessageInit(contrl->bufsend, LEN_PACKET_NORMAL);
-        size_t sendlen = packetDataFill(packet, FRAME_STORAGE, CMD_SYNC_PULL, datanode);
-        packetCRCFill(packet);
-        mdf_destroy(&datanode);
-
-        SSEND(contrl->base.fd, contrl->bufsend, sendlen);
     } else {
         /* 等待 music.db 接收完成后同步数据 */
         TINY_LOG("db nok %s", errmsg);
@@ -615,10 +630,10 @@ static bool _sync_database(void *arg)
     MDF *datanode;
     mdf_init(&datanode);
 
-    mdf_set_value(datanode, "name", item->storename);
+    mdf_set_value(datanode, "name", item->plan->name);
 
     char filename[PATH_MAX];
-    snprintf(filename, sizeof(filename), "%s/%s/%s/music.db", m_appdir, item->id, item->storepath);
+    snprintf(filename, sizeof(filename), "%s%s/%smusic.db", m_appdir, item->id, item->plan->basedir);
     char sumstr[33] = {0};
     ssize_t filesize = mhash_md5_file_s(filename, sumstr);
     if (filesize >= 0) {
@@ -641,6 +656,8 @@ static bool _sync_database(void *arg)
 
 bool mnetStoreSync(char *id, char *storename)
 {
+    char filename[PATH_MAX];
+
     if (!id || !storename) return false;
 
     MsourceNode *item = _source_find(m_sources, id);
@@ -653,13 +670,42 @@ bool mnetStoreSync(char *id, char *storename)
         return false;
     }
 
-    item->storename = mdf_get_value(snode, "name", NULL);
-    item->storepath = mdf_get_value(snode, "path", NULL);
-    if (!item->storename || !item->storepath) return false;
+    char *name = mdf_get_value(snode, "name", NULL);
+    char *path = mdf_get_value(snode, "path", NULL);
+    if (!name || !path) return false;
 
-    mos_mkdirf(0755, "%s/%s/tmp", m_appdir, item->id);
-    mos_mkdirf(0755, "%s/%s/assets/cover", m_appdir, item->id);
-    mos_mkdirf(0755, "%s/%s/%s", m_appdir, item->id, item->storepath);
+    /*
+     * plan
+     */
+    if (item->plan) dommeStoreFree(item->plan);
+    item->plan = dommeStoreCreate();
+    item->plan->name = strdup(name);
+    item->plan->basedir = strdup(path);
+
+    /*
+     * avm
+     * `-- a4204428f3063
+     *     |-- assets
+     *     |   `-- cover
+     *     |       `-- fdf1ff08ed.jpg
+     *     |-- default
+     *     |   `-- music.db
+     *     |-- setting
+     *     `-- tmp
+     *
+     * 6 directories, 2 files
+     */
+    mos_mkdirf(0755, "%s%s/tmp", m_appdir, item->id);
+    mos_mkdirf(0755, "%s%s/setting", m_appdir, item->id);
+    mos_mkdirf(0755, "%s%s/assets/cover", m_appdir, item->id);
+    mos_mkdirf(0755, "%s%s/%s", m_appdir, item->id, path);
+
+    /*
+     * needToSync
+     */
+    if (item->needToSync) mlist_destroy(&item->needToSync);
+    snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", m_appdir, item->id);
+    item->needToSync = mlist_build_from_textfile(filename, 128);
 
     _sync_database(item);
 

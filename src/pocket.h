@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <time.h>
+#include <libgen.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>

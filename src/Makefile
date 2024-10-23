@@ -5,7 +5,7 @@ CFLAGS = -g -DEXECUTEABLE
 
 all: runner tm
 
-runner: mnet.o packet.o timer.o client.o binary.o pocket.o callback.o server.o
+runner: domme.o mnet.o mfile.o packet.o timer.o client.o binary.o pocket.o callback.o server.o
 	gcc $(CFLAGS) $^ -o $@ $(LIBS)
 
 tm: troublemaker.o server.o packet.o pocket.o

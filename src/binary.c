@@ -77,6 +77,18 @@ static bool _parse_packet(BinNode *client, MessagePacket *packet)
     return true;
 }
 
+static void _makesure_directory(char *filename)
+{
+    if (!filename) return;
+
+    char *dirc = strdup(filename);
+    char *dname = dirname(dirc);
+
+    mos_mkdir(dname, 0755);
+
+    free(dirc);
+}
+
 static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
 {
 #define PARTLY_PACKET                                               \
@@ -96,7 +108,7 @@ static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
         if (recvlen <= client->binlen) {
             /* 收到的内容仅够此次吃喝 */
             writelen = fwrite(recvbuf, 1, recvlen, client->fpbin);
-            TINY_LOG("%ju bytes write", writelen);
+            //TINY_LOG("%ju bytes write", writelen);
             if (writelen < recvlen) {
                 mtc_mt_warn("write error %s", strerror(errno));
                 fclose(client->fpbin);
@@ -110,6 +122,7 @@ static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
                 TINY_LOG("SYNC done.");
                 fclose(client->fpbin);
                 client->fpbin = NULL;
+                _makesure_directory(client->filename);
                 if (link(client->tempname, client->filename) != 0)
                     TINY_LOG("link %s failure %s", client->filename, strerror(errno));
                 unlink(client->tempname);
@@ -129,6 +142,7 @@ static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
             TINY_LOG("SYNC done.");
             fclose(client->fpbin);
             client->fpbin = NULL;
+            _makesure_directory(client->filename);
             if (link(client->tempname, client->filename) != 0)
                 TINY_LOG("link %s failure %s", client->filename, strerror(errno));
             unlink(client->tempname);
@@ -164,7 +178,7 @@ static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
         if (recvlen < LEN_HEADER + 1 + 4) PARTLY_PACKET;
 
         MessagePacket *packet = packetMessageGot(recvbuf, recvlen);
-        if (packet->sof == PACKET_SOF && packet->idiot == 1) {
+        if (packet && packet->sof == PACKET_SOF && packet->idiot == 1) {
             if (recvlen < packet->length) {
                 if (packet->length > CONTRL_PACKET_MAX_LEN) {
                     return false;
