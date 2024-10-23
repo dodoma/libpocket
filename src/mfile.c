@@ -61,11 +61,15 @@ static bool _check_needToSync(void *arg)
         }
     }
 
+    snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", mnetAppDir(), item->id);
     if (mlist_length(item->needToSync) == 0) {
+        TINY_LOG("All media file DONE. remove %s", filename);
+
         remove(filename);
 
         return false;
     } else {
+        TINY_LOG("write %s with %d ids", filename, mlist_length(item->needToSync));
         mlist_write_textfile(item->needToSync, filename);
 
         return true;

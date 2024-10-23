@@ -9,8 +9,8 @@
 #include "binary.h"
 #include "server.h"
 
-#define HEARTBEAT_PERIOD 20
-#define HEARTBEAT_TIMEOUT 90
+#define HEARTBEAT_PERIOD 60
+#define HEARTBEAT_TIMEOUT 180
 #define RECONNECT_TIMEOUT 30
 
 time_t g_ctime, g_starton, g_elapsed;
