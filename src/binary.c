@@ -40,7 +40,7 @@ static bool _parse_packet(BinNode *client, MessagePacket *packet)
             }
 
             snprintf(client->filename, sizeof(client->filename),
-                     "%s/%s/%s", mnetAppDir(), source->id, (char*)buf);
+                     "%s%s/%s", mnetAppDir(), source->id, (char*)buf);
             buf += slen;
             buf++;              /* '\0' */
 
@@ -52,7 +52,7 @@ static bool _parse_packet(BinNode *client, MessagePacket *packet)
             remove(client->filename);
 
             snprintf(client->tempname, sizeof(client->tempname),
-                     "%s/%s/tmp/pocket.XXXXXX", mnetAppDir(), source->id);
+                     "%s%s/tmp/pocket.XXXXXX", mnetAppDir(), source->id);
             int fd = mkstemp(client->tempname);
             if (fd < 0) {
                 TINY_LOG("unable to create file %s", client->tempname);
@@ -110,7 +110,7 @@ static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
             writelen = fwrite(recvbuf, 1, recvlen, client->fpbin);
             //TINY_LOG("%ju bytes write", writelen);
             if (writelen < recvlen) {
-                mtc_mt_warn("write error %s", strerror(errno));
+                TINY_LOG("write error %s", strerror(errno));
                 fclose(client->fpbin);
                 client->fpbin = NULL;
                 client->binlen = 0;
@@ -123,9 +123,9 @@ static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
                 fclose(client->fpbin);
                 client->fpbin = NULL;
                 _makesure_directory(client->filename);
-                if (link(client->tempname, client->filename) != 0)
-                    TINY_LOG("link %s failure %s", client->filename, strerror(errno));
-                unlink(client->tempname);
+                if (rename(client->tempname, client->filename) != 0)
+                    TINY_LOG("rename %s failure %s", client->filename, strerror(errno));
+                //unlink(client->tempname);
             }
             return true;
         } else {
@@ -133,7 +133,7 @@ static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
             writelen = fwrite(recvbuf, 1, client->binlen, client->fpbin);
             TINY_LOG("%ju bytes write", writelen);
             if (writelen < client->binlen) {
-                mtc_mt_warn("write error %s", strerror(errno));
+                TINY_LOG("write error %s", strerror(errno));
                 fclose(client->fpbin);
                 client->fpbin = NULL;
                 client->binlen = 0;
@@ -143,9 +143,9 @@ static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
             fclose(client->fpbin);
             client->fpbin = NULL;
             _makesure_directory(client->filename);
-            if (link(client->tempname, client->filename) != 0)
-                TINY_LOG("link %s failure %s", client->filename, strerror(errno));
-            unlink(client->tempname);
+            if (rename(client->tempname, client->filename) != 0)
+                TINY_LOG("rename %s failure %s", client->filename, strerror(errno));
+            //unlink(client->tempname);
 
             size_t exceed = recvlen - client->binlen;
             memmove(recvbuf, recvbuf + client->binlen, exceed);

@@ -542,9 +542,17 @@ bool mnetNext(char *id)
     return true;
 }
 
-bool mnetStoreList(char *id, CONTRL_CALLBACK callback)
+static void _on_store_list(NetNode *client, bool success, char *errmsg, char *response)
 {
-    if (!id || !callback) return false;
+    TINY_LOG("store %s %s", success ? "OK" : errmsg, response);
+
+    mdf_clear(client->upnode->dbnode);
+    mdf_json_import_string(client->upnode->dbnode, response);
+}
+
+bool mnetStoreList(char *id)
+{
+    if (!id) return false;
 
     MsourceNode *item = _source_find(m_sources, id);
     if (!item) return false;
@@ -555,7 +563,7 @@ bool mnetStoreList(char *id, CONTRL_CALLBACK callback)
     size_t sendlen = packetNODataFill(packet, FRAME_CMD, CMD_STORE_LIST);
     packetCRCFill(packet);
 
-    callbackRegist(packet->seqnum, packet->command, callback);
+    callbackRegist(packet->seqnum, packet->command, _on_store_list);
 
     SSEND(node->base.fd, node->bufsend, sendlen);
 
@@ -729,14 +737,6 @@ static void _on_wifi_setted(NetNode *client, bool success, char *errmsg, char *r
     TINY_LOG("wifi setted %s", success ? "OK" : errmsg);
 }
 
-static void _on_store_list(NetNode *client, bool success, char *errmsg, char *response)
-{
-    TINY_LOG("store %s %s", success ? "OK" : errmsg, response);
-
-    mdf_clear(client->upnode->dbnode);
-    mdf_json_import_string(client->upnode->dbnode, response);
-}
-
 
 static void _on_playing(NetNode *client, bool success, char *errmsg, char *response)
 {
@@ -757,7 +757,7 @@ int main(int argc, char *argv[])
     //mnetPlay("a4204428f3063");
 
     sleep(5);
-    mnetStoreList("a4204428f3063", _on_store_list);
+    mnetStoreList("a4204428f3063");
 
     sleep(5);
     mnetStoreSync("a4204428f3063", "默认媒体库");

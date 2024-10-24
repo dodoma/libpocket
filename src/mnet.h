@@ -122,8 +122,8 @@ bool mnetPause(char *id);
 bool mnetResume(char *id);
 bool mnetNext(char *id);
 
-bool mnetStoreList(char *id, CONTRL_CALLBACK callback);
-bool mnetSync(char *id, char *storename);
+bool mnetStoreList(char *id);
+bool mnetStoreSync(char *id, char *storename);
 
 char* mnetDiscover2();
 

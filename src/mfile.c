@@ -15,7 +15,9 @@ char* mfile_test(char *dirname)
 
     snprintf(filename, sizeof(filename), "%s/avmISAVM.txt", dirname);
 
-#if 0
+    TINY_LOG("xxxx %s", filename);
+
+#if 1
     FILE *fp = fopen(filename, "w");
     if (fp) {
         fprintf(fp, "xxxyyyzzz %d\n", count++);
@@ -23,10 +25,14 @@ char* mfile_test(char *dirname)
     } else TINY_LOG("open file for write failure %s %s", filename, strerror(errno));
 #endif
 
-    FILE *fp = fopen(filename, "r");
+    fp = fopen(filename, "r");
     if (fp) {
         if (!fgets(line, sizeof(line), fp)) TINY_LOG("read failure %s", strerror(errno));
     } else TINY_LOG("open file for read failure %s %s", filename, strerror(errno));
+
+    if (rename(filename, "/data/user/0/com.example.libmoc_example/app_flutter/avmISAVM232.txt") != 0)
+        TINY_LOG("link %s failure %s", filename, strerror(errno));
+    else TINY_LOG("link ok");
 
     return line;
 }

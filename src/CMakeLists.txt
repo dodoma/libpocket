@@ -8,22 +8,26 @@ project(libmoc_library VERSION 0.0.1 LANGUAGES C)
 add_library(libmoc SHARED
   "libmoc.c"
   "pocket.c"
+  "domme.c"
   "mnet.c"
   "mfile.c"
   "packet.c"
   "callback.c"
   "client.c"
+  "binary.c"
   "server.c"
   "timer.c"
 )
 
 set(MOC_PUBLIC_HEADERS
     "libmoc.h"
+    "doome.h"
     "mnet.h"
     "mfile.h"
     "packet.h"
     "callback.h"
-    "client.c"
+    "client.h"
+    "binary.h"
     "server.h"
     "timer.h"
 )
