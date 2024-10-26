@@ -17,6 +17,7 @@ add_library(libmoc SHARED
   "binary.c"
   "server.c"
   "timer.c"
+  "omusic.c"
 )
 
 set(MOC_PUBLIC_HEADERS
@@ -30,6 +31,7 @@ set(MOC_PUBLIC_HEADERS
     "binary.h"
     "server.h"
     "timer.h"
+    "omusic.h"
 )
 
 set_target_properties(libmoc PROPERTIES

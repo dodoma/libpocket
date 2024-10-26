@@ -8,6 +8,7 @@
 #include "client.h"
 #include "binary.h"
 #include "server.h"
+#include "omusic.h"
 
 #define HEARTBEAT_PERIOD 60
 #define HEARTBEAT_TIMEOUT 180
@@ -546,8 +547,12 @@ static void _on_store_list(NetNode *client, bool success, char *errmsg, char *re
 {
     TINY_LOG("store %s %s", success ? "OK" : errmsg, response);
 
-    mdf_clear(client->upnode->dbnode);
-    mdf_json_import_string(client->upnode->dbnode, response);
+    MsourceNode *item = client->upnode;
+
+    mdf_clear(item->dbnode);
+    mdf_json_import_string(item->dbnode, response);
+
+    mdf_json_export_filef(item->dbnode, "%s%s/config.json", m_appdir, item->id);
 }
 
 bool mnetStoreList(char *id)
@@ -556,6 +561,8 @@ bool mnetStoreList(char *id)
 
     MsourceNode *item = _source_find(m_sources, id);
     if (!item) return false;
+
+    mos_mkdirf(0755, "%s%s", m_appdir, item->id);
 
     CtlNode *node = &item->contrl;
 
@@ -583,6 +590,7 @@ static void _on_database_check(NetNode *client, bool success, char *errmsg, char
         /* db 没有变化，直接同步数据 */
         TINY_LOG("db ok, build sync list...");
 
+        omusicStoreClear(item->id);     /* 更新客户端UI */
         dommeStoreClear(plan);
 
         char filename[PATH_MAX];
@@ -625,7 +633,7 @@ static void _on_database_check(NetNode *client, bool success, char *errmsg, char
     }
 }
 
-int _store_compare(const void *anode, void *key)
+static int _store_compare(const void *anode, void *key)
 {
     return strcmp(mdf_get_value((MDF*)anode, "name", ""), (char*)key);
 }
@@ -761,6 +769,11 @@ int main(int argc, char *argv[])
 
     sleep(5);
     mnetStoreSync("a4204428f3063", "默认媒体库");
+    omusicStoreSelect("a4204428f3063", "默认媒体库");
+
+    sleep(5);
+    TINY_LOG("home: %s", omusicHome("a4204428f3063"));
+    TINY_LOG("artist: %s", omusicArtist("a4204428f3063", "U2"));
 
 #if 0
     int count = 0;

@@ -175,7 +175,7 @@ MERR* dommeLoadFromFile(char *filename, DommeStore *plan)
                 char *name = mdf_get_value(song, "[1]", NULL);
                 char *title = mdf_get_value(song, "[2]", NULL);
 
-                TINY_LOG("restore music %s%s with id %s", dir, name, id);
+                //TINY_LOG("restore music %s%s with id %s", dir, name, id);
 
                 mfile = mos_calloc(1, sizeof(DommeFile));
                 memcpy(mfile->id, id, strlen(id) > LEN_DOMMEID ? LEN_DOMMEID : strlen(id));
@@ -208,6 +208,8 @@ MERR* dommeLoadFromFile(char *filename, DommeStore *plan)
     }
 
     mdf_destroy(&dbnode);
+
+    TINY_LOG("restore %s with %d tracks", filename, plan->count_track);
 
     /*
      * post dbload scan
