@@ -117,10 +117,17 @@ bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name,
 
 bool mnetPlayInfo(char *id, CONTRL_CALLBACK callback);
 bool mnetOnStep(char *id, CONTRL_CALLBACK callback);
+bool mnetSetShuffle(char *id, bool shuffle);
+bool mnetSetVolume(char *id, double volume);
 bool mnetPlay(char *id);
+bool mnetPlayID(char *id, char *trackid);
+bool mnetPlayAlbum(char *id, char *name, char *title);
+bool mnetPlayArtist(char *id, char *name);
 bool mnetPause(char *id);
 bool mnetResume(char *id);
 bool mnetNext(char *id);
+bool mnetPrevious(char *id);
+bool mnetDragTO(char *id, double percent);
 
 bool mnetStoreList(char *id);
 bool mnetStoreSync(char *id, char *storename);

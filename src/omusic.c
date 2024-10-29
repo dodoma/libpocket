@@ -223,11 +223,15 @@ char* omusicAlbum(char *id, char *name, char*title)
     MDF *anode = mdf_get_or_create_node(outnode, "tracks");
 
     DommeFile *dfile;
+    char duration[8];
     MLIST_ITERATE(disk->tracks, dfile) {
         MDF *cnode = mdf_insert_node(anode, NULL, -1);
 
+        sprintf(duration, "%02d:%02d", dfile->length / 60, dfile->length % 60);
+
+        mdf_set_value(cnode, "id", dfile->id);
         mdf_set_value(cnode, "title", dfile->title);
-        mdf_set_value(cnode, "duration", "xxxxx");
+        mdf_set_value(cnode, "duration", duration);
     }
     mdf_object_2_array(anode, NULL);
 

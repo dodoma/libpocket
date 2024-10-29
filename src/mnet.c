@@ -471,6 +471,54 @@ bool mnetOnStep(char *id, CONTRL_CALLBACK callback)
     return true;
 }
 
+bool mnetSetShuffle(char *id, bool shuffle)
+{
+    if (!id) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    CtlNode *node = &item->contrl;
+
+    MDF *datanode;
+    mdf_init(&datanode);
+    mdf_set_bool_value(datanode, "shuffle", shuffle);
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetDataFill(packet, FRAME_AUDIO, CMD_SET_SHUFFLE, datanode);
+    packetCRCFill(packet);
+
+    SSEND(node->base.fd, node->bufsend, sendlen);
+
+    mdf_destroy(&datanode);
+
+    return true;
+}
+
+bool mnetSetVolume(char *id, double volume)
+{
+    if (!id || volume > 1.0) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    CtlNode *node = &item->contrl;
+
+    MDF *datanode;
+    mdf_init(&datanode);
+    mdf_set_double_value(datanode, "volume", volume);
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetDataFill(packet, FRAME_AUDIO, CMD_SET_VOLUME, datanode);
+    packetCRCFill(packet);
+
+    SSEND(node->base.fd, node->bufsend, sendlen);
+
+    mdf_destroy(&datanode);
+
+    return true;
+}
+
 bool mnetPlay(char *id)
 {
     if (!id) return false;
@@ -485,6 +533,79 @@ bool mnetPlay(char *id)
     packetCRCFill(packet);
 
     SSEND(node->base.fd, node->bufsend, sendlen);
+
+    return true;
+}
+
+bool mnetPlayID(char *id, char *trackid)
+{
+    if (!id || !trackid) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    CtlNode *node = &item->contrl;
+
+    MDF *datanode;
+    mdf_init(&datanode);
+    mdf_set_value(datanode, "id", trackid);
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetDataFill(packet, FRAME_AUDIO, CMD_PLAY, datanode);
+    packetCRCFill(packet);
+
+    SSEND(node->base.fd, node->bufsend, sendlen);
+
+    mdf_destroy(&datanode);
+
+    return true;
+}
+
+bool mnetPlayAlbum(char *id, char *name, char *title)
+{
+    if (!id || !name || !title) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    CtlNode *node = &item->contrl;
+
+    MDF *datanode;
+    mdf_init(&datanode);
+    mdf_set_value(datanode, "name", name);
+    mdf_set_value(datanode, "title", title);
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetDataFill(packet, FRAME_AUDIO, CMD_PLAY, datanode);
+    packetCRCFill(packet);
+
+    SSEND(node->base.fd, node->bufsend, sendlen);
+
+    mdf_destroy(&datanode);
+
+    return true;
+}
+
+bool mnetPlayArtist(char *id, char *name)
+{
+    if (!id || !name) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    CtlNode *node = &item->contrl;
+
+    MDF *datanode;
+    mdf_init(&datanode);
+    mdf_set_value(datanode, "name", name);
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetDataFill(packet, FRAME_AUDIO, CMD_PLAY, datanode);
+    packetCRCFill(packet);
+
+    SSEND(node->base.fd, node->bufsend, sendlen);
+
+    mdf_destroy(&datanode);
 
     return true;
 }
@@ -539,6 +660,48 @@ bool mnetNext(char *id)
     packetCRCFill(packet);
 
     SSEND(node->base.fd, node->bufsend, sendlen);
+
+    return true;
+}
+
+bool mnetPrevious(char *id)
+{
+    if (!id) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    CtlNode *node = &item->contrl;
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetNODataFill(packet, FRAME_AUDIO, CMD_PREVIOUS);
+    packetCRCFill(packet);
+
+    SSEND(node->base.fd, node->bufsend, sendlen);
+
+    return true;
+}
+
+bool mnetDragTO(char *id, double percent)
+{
+    if (!id || percent > 1.0) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    CtlNode *node = &item->contrl;
+
+    MDF *datanode;
+    mdf_init(&datanode);
+    mdf_set_double_value(datanode, "percent", percent);
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetDataFill(packet, FRAME_AUDIO, CMD_DRAGTO, datanode);
+    packetCRCFill(packet);
+
+    SSEND(node->base.fd, node->bufsend, sendlen);
+
+    mdf_destroy(&datanode);
 
     return true;
 }
@@ -773,7 +936,7 @@ int main(int argc, char *argv[])
 
     sleep(5);
     TINY_LOG("home: %s", omusicHome("a4204428f3063"));
-    TINY_LOG("artist: %s", omusicArtist("a4204428f3063", "U2"));
+    TINY_LOG("artist: %s", omusicAlbum("a4204428f3063", "U2", "Duals"));
 
 #if 0
     int count = 0;

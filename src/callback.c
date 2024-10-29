@@ -211,11 +211,23 @@ void callbackRegist(uint16_t seqnum, uint16_t command, CONTRL_CALLBACK callback)
 {
     if (!callback) return;
 
-    CallbackEntry *centry = calloc(1, sizeof(CallbackEntry));
+    CallbackEntry *centry = NULL;
+    MDLIST *dlist = mdlist_head(m_callback->callbacks);
+    while (dlist) {
+        centry = (CallbackEntry*)mdlist_data(dlist);
+        if (centry->seqnum == seqnum) {
+            centry->callback = callback;
+            return;
+        }
+
+        dlist = mdlist_next(dlist);
+    }
+
+    centry = calloc(1, sizeof(CallbackEntry));
     centry->seqnum = seqnum;
     centry->callback = callback;
 
-    MDLIST *dlist = mdlist_new(centry);
+    dlist = mdlist_new(centry);
     m_callback->callbacks = mdlist_concat(m_callback->callbacks, dlist);
 }
 
