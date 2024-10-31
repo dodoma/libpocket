@@ -42,6 +42,12 @@ void callbackStart();
 void callbackStop();
 
 void callbackRegist(uint16_t seqnum, uint16_t command, CONTRL_CALLBACK callback);
+
+void callbackSetServerConnectted(void (*callback)(char *id, CLIENT_TYPE type));
+void callbackSetServerClosed(void (*callback)(char *id, CLIENT_TYPE type));
+void callbackSetConnectionLost(void (*callback)(char *id, CLIENT_TYPE type));
+void callbackServerConnectted(char *id, CLIENT_TYPE type);
+
 /*
  * 如果 errmsg, response 不为空，请确保为跨线程安全内存，回调完毕后会自动释放
  */

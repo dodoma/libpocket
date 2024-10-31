@@ -7,6 +7,10 @@
 
 CallbackManager *m_callback = NULL;
 
+static void (*_user_cbk_server_connectted)(char *id, CLIENT_TYPE type) = NULL;
+static void (*_user_cbk_server_closed)(char *id, CLIENT_TYPE type) = NULL;
+static void (*_user_cbk_connection_lost)(char *id, CLIENT_TYPE type) = NULL;
+
 static void* _do(void *arg)
 {
     int rv;
@@ -151,11 +155,15 @@ void queueFree(QueueManager *queue)
 static void _server_closed(NetNode *client, bool success, char *errmsg, char *response)
 {
     TINY_LOG("server %s closed", errmsg);
+
+    if (_user_cbk_server_closed) _user_cbk_server_closed(errmsg, client->ctype);
 }
 
 static void _connection_lost(NetNode *client, bool success, char *errmsg, char *response)
 {
     TINY_LOG("lost connection with %s", errmsg);
+
+    if (_user_cbk_connection_lost) _user_cbk_connection_lost(errmsg, client->ctype);
 }
 
 static void _on_playing_step(NetNode *client, bool success, char *errmsg, char *response)
@@ -229,6 +237,26 @@ void callbackRegist(uint16_t seqnum, uint16_t command, CONTRL_CALLBACK callback)
 
     dlist = mdlist_new(centry);
     m_callback->callbacks = mdlist_concat(m_callback->callbacks, dlist);
+}
+
+void callbackSetServerConnectted(void (*callback)(char *id, CLIENT_TYPE type))
+{
+    _user_cbk_server_connectted = callback;
+}
+
+void callbackSetServerClosed(void (*callback)(char *id, CLIENT_TYPE type))
+{
+    _user_cbk_server_closed = callback;
+}
+
+void callbackSetConnectionLost(void (*callback)(char *id, CLIENT_TYPE type))
+{
+    _user_cbk_connection_lost = callback;
+}
+
+void callbackServerConnectted(char *id, CLIENT_TYPE type)
+{
+    if (_user_cbk_server_connectted) _user_cbk_server_connectted(id, type);
 }
 
 void callbackEntryFree(void *p)

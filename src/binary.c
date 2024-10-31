@@ -261,5 +261,5 @@ void serverBinClosed(BinNode *client)
     close(client->base.fd);
     client->base.fd = -1;
 
-    callbackOn((NetNode*)client, SEQ_SERVER_CLOSED, 0, false, strdup(client->base.upnode->id), NULL);
+    callbackOn((NetNode*)client, SEQ_SERVER_CLOSED, 1, false, strdup(client->base.upnode->id), NULL);
 }

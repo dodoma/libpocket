@@ -117,6 +117,11 @@ bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name,
 
 bool mnetPlayInfo(char *id, CONTRL_CALLBACK callback);
 bool mnetOnStep(char *id, CONTRL_CALLBACK callback);
+
+bool mnetOnServerConnectted(void (*callback)(char *id, CLIENT_TYPE type));
+bool mnetOnServerClosed(void (*callback)(char *id, CLIENT_TYPE type));
+bool mnetOnConnectionLost(void (*callback)(char *id, CLIENT_TYPE type));
+
 bool mnetSetShuffle(char *id, bool shuffle);
 bool mnetSetVolume(char *id, double volume);
 bool mnetPlay(char *id);

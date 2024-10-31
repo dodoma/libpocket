@@ -10,9 +10,12 @@
 #include "server.h"
 #include "omusic.h"
 
-#define HEARTBEAT_PERIOD 60
-#define HEARTBEAT_TIMEOUT 180
-#define RECONNECT_TIMEOUT 30
+#define HEARTBEAT_PERIOD 2
+#define HEARTBEAT_TIMEOUT 6
+#define RECONNECT_TIMEOUT 3
+
+#define HEARTBEAT_PERIOD_BIN 60
+#define HEARTBEAT_TIMEOUT_BIN 180
 
 time_t g_ctime, g_starton, g_elapsed;
 
@@ -45,7 +48,14 @@ static bool _keep_heartbeat(void *data)
             TINY_LOG("reconnect to %s", item->id);
 
             contrl->base.pong = g_ctime;
-            serverConnect((NetNode*)&item->contrl);
+            if (serverConnect((NetNode*)&item->contrl)) {
+                uint8_t connbuf[LEN_IDIOT] = {0};
+                size_t connlen = packetIdiotFill(connbuf, IDIOT_CONNECT);
+                send(item->contrl.base.fd, connbuf, connlen, MSG_NOSIGNAL);
+                MSG_LOG(g_dumpsend, "SEND: ", connbuf, connlen);
+
+                callbackServerConnectted(item->id, contrl->base.ctype);
+            } else TINY_LOG("lost");
         }
     } else {
         /* 链接正常，进行心跳保持和通畅判断 */
@@ -72,7 +82,7 @@ static bool _keep_heartbeat(void *data)
             serverConnect((NetNode*)&item->binary);
         }
     } else {
-        if (g_ctime > binary->base.pong && g_ctime - binary->base.pong > HEARTBEAT_TIMEOUT) {
+        if (g_ctime > binary->base.pong && g_ctime - binary->base.pong > HEARTBEAT_TIMEOUT_BIN) {
             TINY_LOG("connection lost on timeout %d", binary->base.fd);
 
             binary->base.online = false;
@@ -81,8 +91,10 @@ static bool _keep_heartbeat(void *data)
             callbackOn((NetNode*)&item->binary, SEQ_CONNECTION_LOST,
                        1, false, strdup(item->id), NULL);
         } else {
-            send(binary->base.fd, sendbuf, sendlen, MSG_NOSIGNAL);
-            //MSG_LOG("SEND: ", sendbuf, sendlen);
+            if (g_ctime > binary->base.pong && g_ctime - binary->base.pong > HEARTBEAT_PERIOD_BIN) {
+                send(binary->base.fd, sendbuf, sendlen, MSG_NOSIGNAL);
+                //MSG_LOG("SEND: ", sendbuf, sendlen);
+            }
         }
     }
 
@@ -467,6 +479,33 @@ bool mnetOnStep(char *id, CONTRL_CALLBACK callback)
     if (!id || !callback) return false;
 
     callbackRegist(SEQ_PLAY_STEP, 0, callback);
+
+    return true;
+}
+
+bool mnetOnServerConnectted(void (*callback)(char *id, CLIENT_TYPE type))
+{
+    if (!callback) return false;
+
+    callbackSetServerConnectted(callback);
+
+    return true;
+}
+
+bool mnetOnServerClosed(void (*callback)(char *id, CLIENT_TYPE type))
+{
+    if (!callback) return false;
+
+    callbackSetServerClosed(callback);
+
+    return true;
+}
+
+bool mnetOnConnectionLost(void (*callback)(char *id, CLIENT_TYPE type))
+{
+    if (!callback) return false;
+
+    callbackSetConnectionLost(callback);
 
     return true;
 }
