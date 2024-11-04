@@ -48,8 +48,10 @@ void omusicStoreSelect(char *id, char *storename)
     if (!id || !storename) return;
 
     OmusicNode *item = omusicStoreClear(id);
-    if (item) item->storename = strdup(storename);
-    else {
+    if (item) {
+        mos_free(item->storename);
+        item->storename = strdup(storename);
+    } else {
         item = calloc(1, sizeof(OmusicNode));
         strncpy(item->id, id, LEN_CPUID);
         snprintf(item->libroot, sizeof(item->libroot), "%s%s/", mnetAppDir(), id);
@@ -115,6 +117,21 @@ static OmusicNode* _makesure_load(char *id)
         TINY_LOG("find %s failure, call omusicStoreSelect() first", id);
         return NULL;
     }
+}
+
+char* omusicStoreList(char *id)
+{
+    if (!id) return NULL;
+
+    OmusicNode *item = _makesure_load(id);
+    if (!item) {
+        TINY_LOG("%s store/path empty", id);
+        return NULL;
+    }
+
+    char *output = mdf_json_export_string(item->dbnode);
+
+    return output;
 }
 
 char* omusicHome(char *id)

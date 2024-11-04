@@ -34,7 +34,7 @@ static bool _keep_heartbeat(void *data)
 {
     MsourceNode *item = (MsourceNode*)data;
 
-    TINY_LOG("on keep heartbeat timeout");
+    //TINY_LOG("on keep heartbeat timeout");
 
     uint8_t sendbuf[256] = {0};
     size_t sendlen = packetPINGFill(sendbuf, sizeof(sendbuf));
@@ -415,8 +415,7 @@ MsourceNode* _source_find(MsourceNode *nodes, char *id)
 /*
  * ============ business ============
  */
-bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name,
-                 CONTRL_CALLBACK callback)
+bool mnetWifiSet(char *id, char *ap, char *passwd, char *name, CONTRL_CALLBACK callback)
 {
     if (!id) return false;
 
@@ -549,6 +548,30 @@ bool mnetSetVolume(char *id, double volume)
 
     MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
     size_t sendlen = packetDataFill(packet, FRAME_AUDIO, CMD_SET_VOLUME, datanode);
+    packetCRCFill(packet);
+
+    SSEND(node->base.fd, node->bufsend, sendlen);
+
+    mdf_destroy(&datanode);
+
+    return true;
+}
+
+bool mnetStoreSwitch(char *id, char *name)
+{
+    if (!id || !name) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    CtlNode *node = &item->contrl;
+
+    MDF *datanode;
+    mdf_init(&datanode);
+    mdf_set_value(datanode, "name", name);
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetDataFill(packet, FRAME_AUDIO, CMD_STORE_SWITCH, datanode);
     packetCRCFill(packet);
 
     SSEND(node->base.fd, node->bufsend, sendlen);

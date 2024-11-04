@@ -95,25 +95,12 @@ char* mnetAppDir();
 char* mnetDiscovery();
 
 /*
- * 与 moc server 建立长连接，并保持心跳
- * 成功链接返回 true
- * 失败返回 false
- */
-bool mnetMocConnect();
-
-/*
- * 判断音源设备 sn 远程在线状态
- * 同步请求，数秒内返回，有超时判断
- */
-bool mnetOnlineCheck(char *id);
-
-/*
  * 随机播放歌曲
  * 仅本地链接时可调用
  */
 bool mnetPlayRandom(char *id);
 
-bool mnetWifiSet(char *id, const char *ap, const char *passwd, const char *name, CONTRL_CALLBACK callback);
+bool mnetWifiSet(char *id, char *ap, char *passwd, char *name, CONTRL_CALLBACK callback);
 
 bool mnetPlayInfo(char *id, CONTRL_CALLBACK callback);
 bool mnetOnStep(char *id, CONTRL_CALLBACK callback);
@@ -124,6 +111,7 @@ bool mnetOnConnectionLost(void (*callback)(char *id, CLIENT_TYPE type));
 
 bool mnetSetShuffle(char *id, bool shuffle);
 bool mnetSetVolume(char *id, double volume);
+bool mnetStoreSwitch(char *id, char *name);
 bool mnetPlay(char *id);
 bool mnetPlayID(char *id, char *trackid);
 bool mnetPlayAlbum(char *id, char *name, char *title);
