@@ -37,51 +37,6 @@ char* mfile_test(char *dirname)
     return line;
 }
 
-/*
- * 用户通过专辑或者艺术及勾选需要同步的音频文件后，id列表保存至了 setting/needToSync 中
- * 无论是切换媒体库时同步，还是设置后触发的同步，就只管同步
- * 该函数用于检查同步是否完成，完成则清空 needToSync，否则删掉文件中已完成同步的id
- */
-static bool _check_needToSync(void *arg)
-{
-    MsourceNode *item = (MsourceNode*)arg;
-    DommeStore *plan = item->plan;
-    char filename[PATH_MAX];
-    struct stat fs;
-    char *id;
-
-    if (!plan) return false;
-
-    MLIST_ITERATE(item->needToSync, id) {
-        bool exist = false;
-        DommeFile *dfile = dommeGetFile(plan, id);
-        if (dfile) {
-            snprintf(filename, sizeof(filename), "%s%s/%s%s%s",
-                     mnetAppDir(), item->id, plan->basedir, dfile->dir, dfile->name);
-            if (stat(filename, &fs) == 0) exist = true;
-        }
-
-        if (exist || !dfile) {
-            mlist_delete(item->needToSync, _moon_i);
-            _moon_i--;
-        }
-    }
-
-    snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", mnetAppDir(), item->id);
-    if (mlist_length(item->needToSync) == 0) {
-        TINY_LOG("All media file DONE. remove %s", filename);
-
-        remove(filename);
-
-        return false;
-    } else {
-        TINY_LOG("write %s with %d ids", filename, mlist_length(item->needToSync));
-        mlist_write_textfile(item->needToSync, filename);
-
-        return true;
-    }
-}
-
 static SyncFile* _syncNew(char *name, char *id, char *artist, char *album, SYNC_TYPE type)
 {
     SyncFile *sfile = mos_calloc(1, sizeof(SyncFile));
@@ -167,8 +122,10 @@ MLIST* mfileBuildSynclist(MsourceNode *item)
     /*
      * 2. 搞定媒体文件
      */
+    snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", mnetAppDir(), item->id);
+    MLIST *needToSync = mlist_build_from_textfile(filename, 128);
     char *id;
-    MLIST_ITERATE(item->needToSync, id) {
+    MLIST_ITERATE(needToSync, id) {
         dfile = dommeGetFile(plan, id);
         if (dfile) {
             char tok[512];
@@ -179,11 +136,12 @@ MLIST* mfileBuildSynclist(MsourceNode *item)
                 mlist_append(synclist, _syncNew(tok, NULL, NULL, NULL, SYNC_RAWFILE));
         }
     }
+    mlist_destroy(&needToSync);
 
     /*
      * 3. 定时善后
      */
-    g_timers = timerAdd(g_timers, 60, false, item, _check_needToSync);
+    g_timers = timerAdd(g_timers, 60, false, item, mnetNTSCheck);
 
     return synclist;
 }

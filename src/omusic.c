@@ -25,6 +25,39 @@ static OmusicNode* _source_find(OmusicNode *nodes, char *id)
     return NULL;
 }
 
+static bool _file_exist(char *filename)
+{
+    if (access(filename, F_OK) == 0) return true;
+    else return false;
+}
+
+static bool _file_existf(const char *fmt, ...)
+{
+    if (!fmt) return false;
+
+    char filename[PATH_MAX];
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsnprintf(filename, sizeof(filename), fmt, ap);
+    va_end(ap);
+
+    return _file_exist(filename);
+}
+
+static bool _disk_cached(OmusicNode *item, DommeAlbum *disk)
+{
+    if (!item || !item->plan || !disk) return false;
+
+    DommeFile *dfile;
+    MLIST_ITERATE(disk->tracks, dfile) {
+        if (!_file_existf("%s%s/%s%s%s", mnetAppDir(), item->id,
+                          item->plan->basedir, dfile->dir, dfile->name)) return false;
+    }
+
+    return true;
+}
+
 OmusicNode* omusicStoreClear(char *id)
 {
     if (!id) return NULL;
@@ -69,7 +102,7 @@ static OmusicNode* _makesure_load(char *id)
     char filename[PATH_MAX];
     MERR *err;
 
-    if (!id) return NULL;
+    if (!id || *id == '\0') return NULL;
 
     OmusicNode *item = _source_find(m_sources, id);
     if (item && item->storename) {
@@ -202,7 +235,8 @@ char* omusicArtist(char *id, char *name)
         mdf_set_valuef(cnode, "cover=%s/assets/cover/%s_%s", item->libroot, name, disk->title);
         mdf_set_int_value(cnode, "countTrack", mlist_length(disk->tracks));
         mdf_set_value(cnode, "PD", disk->year);
-        mdf_set_bool_value(cnode, "cached", false); /* TODO xxxx */
+        if (_disk_cached(item, disk)) mdf_set_bool_value(cnode, "cached", true);
+        else mdf_set_bool_value(cnode, "cached", false);
     }
     mdf_object_2_array(anode, NULL);
 
@@ -256,4 +290,108 @@ char* omusicAlbum(char *id, char *name, char*title)
     mdf_destroy(&outnode);
 
     return output;
+}
+
+char* omusicLocation(char *id, char *trackid)
+{
+    if (!id || !trackid) return NULL;
+
+    static char filename[PATH_MAX];
+
+    OmusicNode *item = _makesure_load(id);
+    if (!item) {
+        TINY_LOG("%s store/path empty", id);
+        return NULL;
+    }
+
+    DommeFile *dfile = dommeGetFile(item->plan, trackid);
+    if (dfile) {
+        snprintf(filename, sizeof(filename), "%s%s/%s%s%s",
+                 mnetAppDir(), id, item->plan->basedir, dfile->dir, dfile->name);
+
+        if (_file_exist(filename)) return filename;
+        else {
+            TINY_LOG("%s not exist", filename);
+            return "";
+        }
+    } else {
+        TINY_LOG("%s not exist", trackid);
+        return NULL;
+    }
+}
+
+char* omusicAlbumIDS(char *id, char *name, char *title)
+{
+    if (!id || !name || !title) return NULL;
+
+    char filename[PATH_MAX];
+
+    OmusicNode *item = _makesure_load(id);
+    if (!item) {
+        TINY_LOG("%s store/path empty", id);
+        return NULL;
+    }
+
+    DommeArtist *artist = artistFind(item->plan->artists, name);
+    if (!artist) return NULL;
+
+    DommeAlbum *disk = albumFind(artist->albums, title);
+    if (!disk) return NULL;
+
+    MDF *outnode;
+    mdf_init(&outnode);
+
+    int idcount = 0;
+    DommeFile *dfile;
+    MLIST_ITERATE(disk->tracks, dfile) {
+        snprintf(filename, sizeof(filename), "%s%s/%s%s%s",
+                 mnetAppDir(), id, item->plan->basedir, dfile->dir, dfile->name);
+
+        if (_file_exist(filename)) mdf_set_valuef(outnode, "[%d]=%s", idcount++, dfile->id);
+    }
+    mdf_object_2_array(outnode, NULL);
+
+    char *output = mdf_json_export_string(outnode);
+    mdf_destroy(&outnode);
+
+    return output;
+}
+
+bool omusicSyncAlbum(char *id, char *name, char *title)
+{
+    if (!id || !name || !title) return false;
+
+    OmusicNode *item = _makesure_load(id);
+    if (!item) {
+        TINY_LOG("%s store/path empty", id);
+        return false;
+    }
+
+    DommeArtist *artist = artistFind(item->plan->artists, name);
+    if (!artist) return false;
+
+    DommeAlbum *disk = albumFind(artist->albums, title);
+    if (!disk) return false;
+
+    char filename[PATH_MAX];
+    snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", mnetAppDir(), id);
+
+    TINY_LOG("write %s with %d ids", filename, mlist_length(disk->tracks));
+    FILE *fp = fopen(filename, "a");
+    if (fp) {
+        DommeFile *dfile;
+        MLIST_ITERATE(disk->tracks, dfile) {
+            fputs(dfile->id, fp);
+            fputc('\n', fp);
+        }
+
+        fclose(fp);
+    } else {
+        TINY_LOG("open %s for write error %s", filename, strerror(errno));
+        return false;
+    }
+
+    g_timers = timerAdd(g_timers, 1, true, item->id, mnetSyncTracks);
+
+    return true;
 }

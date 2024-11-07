@@ -66,7 +66,6 @@ typedef struct _msource_node {
 
     MDF *dbnode;
 
-    MLIST *needToSync;
     DommeStore *plan;
 
     CtlNode contrl;
@@ -124,6 +123,9 @@ bool mnetDragTO(char *id, double percent);
 
 bool mnetStoreList(char *id);
 bool mnetStoreSync(char *id, char *storename);
+
+bool mnetNTSCheck(void *arg);
+bool mnetSyncTracks(void *arg);
 
 char* mnetDiscover2();
 

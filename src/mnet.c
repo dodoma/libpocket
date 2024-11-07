@@ -283,7 +283,6 @@ static bool _onbroadcast(char cpuid[LEN_CPUID], char ip[INET_ADDRSTRLEN],
     memcpy(item->id, cpuid, LEN_CPUID);
     item->ip = strdup(ip);
     mdf_init(&item->dbnode);
-    item->needToSync = NULL;
     item->plan = NULL;
     item->contrl.base.fd = -1;
     item->contrl.base.online = false;
@@ -941,16 +940,107 @@ bool mnetStoreSync(char *id, char *storename)
     mos_mkdirf(0755, "%s%s/assets/cover", m_appdir, item->id);
     mos_mkdirf(0755, "%s%s/%s", m_appdir, item->id, path);
 
-    /*
-     * needToSync
-     */
-    if (item->needToSync) mlist_destroy(&item->needToSync);
-    snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", m_appdir, item->id);
-    item->needToSync = mlist_build_from_textfile(filename, 128);
-
     _sync_database(item);
 
     return true;
+}
+
+/*
+ * 用户通过专辑或者艺术及勾选需要同步的音频文件后，id列表保存至了 setting/needToSync 中
+ * 无论是切换媒体库时同步，还是设置后触发的同步，就只管同步
+ * 该函数用于检查同步是否完成，完成则清空 needToSync，否则删掉文件中已完成同步的id
+ */
+bool mnetNTSCheck(void *arg)
+{
+    MsourceNode *item = (MsourceNode*)arg;
+    DommeStore *plan = item->plan;
+    char filename[PATH_MAX];
+    struct stat fs;
+
+    if (!plan) return false;
+
+    snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", m_appdir, item->id);
+    MLIST *synclist = mlist_build_from_textfile(filename, 128);
+    if (!synclist) return false;
+
+    char *id;
+    MLIST_ITERATE(synclist, id) {
+        bool exist = false;
+
+        DommeFile *mfile = dommeGetFile(plan, id);
+        if (mfile) {
+            snprintf(filename, sizeof(filename), "%s%s/%s%s%s",
+                     m_appdir, item->id, plan->basedir, mfile->dir, mfile->name);
+            if (stat(filename, &fs) == 0) exist = true;
+        }
+
+        if (exist || !mfile) {
+            mlist_delete(synclist, _moon_i);
+            _moon_i--;
+        }
+    }
+
+    snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", m_appdir, item->id);
+    if (mlist_length(synclist) == 0) {
+        TINY_LOG("All media file DONE. remove %s", filename);
+
+        mlist_destroy(&synclist);
+        remove(filename);
+
+        return false;
+    } else {
+        TINY_LOG("write %s with %d ids", filename, mlist_length(synclist));
+
+        mlist_destroy(&synclist);
+        mlist_write_textfile(synclist, filename);
+
+        return true;
+    }
+}
+
+bool mnetSyncTracks(void *arg)
+{
+    struct stat fs;
+    char *id = (char*)arg;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    CtlNode *contrl = &item->contrl;
+
+    char filename[PATH_MAX];
+    snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", m_appdir, id);
+    MLIST *synclist = mlist_build_from_textfile(filename, 128);
+
+    MDF *datanode;
+    mdf_init(&datanode);
+
+    char *fileid;
+    MLIST_ITERATE(synclist, fileid) {
+        DommeFile *mfile = dommeGetFile(item->plan, fileid);
+        if (mfile) {
+            snprintf(filename, sizeof(filename), "%s%s/%s%s%s",
+                     m_appdir, id, item->plan->basedir, mfile->dir, mfile->name);
+            if (stat(filename, &fs) != 0) {
+                mdf_clear(datanode);
+                mdf_set_int_value(datanode, "type", SYNC_RAWFILE);
+                mdf_set_valuef(datanode, "name=%s%s", mfile->dir, mfile->name);
+
+                MessagePacket *packet = packetMessageInit(contrl->bufsend, LEN_PACKET_NORMAL);
+                size_t sendlen = packetDataFill(packet, FRAME_STORAGE, CMD_SYNC_PULL, datanode);
+                packetCRCFill(packet);
+
+                SSEND(contrl->base.fd, contrl->bufsend, sendlen);
+            }
+        }
+    }
+
+    mlist_destroy(&synclist);
+    mdf_destroy(&datanode);
+
+    g_timers = timerAdd(g_timers, 60, false, item, mnetNTSCheck);
+
+    return false;
 }
 
 
@@ -992,13 +1082,14 @@ int main(int argc, char *argv[])
     sleep(5);
     mnetStoreList("a4204428f3063");
 
-    sleep(5);
-    mnetStoreSync("a4204428f3063", "默认媒体库");
+    //sleep(5);
+    //mnetStoreSync("a4204428f3063", "默认媒体库");
     omusicStoreSelect("a4204428f3063", "默认媒体库");
 
     sleep(5);
-    TINY_LOG("home: %s", omusicHome("a4204428f3063"));
-    TINY_LOG("artist: %s", omusicAlbum("a4204428f3063", "U2", "Duals"));
+    //TINY_LOG("home: %s", omusicHome("a4204428f3063"));
+    TINY_LOG("home: %s", omusicArtist("a4204428f3063", "U2"));
+    //TINY_LOG("artist: %s", omusicAlbum("a4204428f3063", "U2", "Duals"));
 
 #if 0
     int count = 0;

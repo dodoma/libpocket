@@ -27,4 +27,10 @@ char* omusicHome(char *id);
 char* omusicArtist(char *id, char *name);
 char* omusicAlbum(char *id, char *name, char*title);
 
+char* omusicLocation(char *id, char *trackid);
+char* omusicAlbumIDS(char *id, char *name, char *title);
+
+/* 同步缓存专辑 */
+bool omusicSyncAlbum(char *id, char *name, char *title);
+
 #endif  /* __OMUSIC_H__ */
