@@ -320,6 +320,89 @@ char* omusicLocation(char *id, char *trackid)
     }
 }
 
+char* omusicLibraryID(char *id)
+{
+    if (!id) return NULL;
+
+    char filename[PATH_MAX];
+    static char fileid[LEN_CPUID];
+
+    OmusicNode *item = _makesure_load(id);
+    if (!item) {
+        TINY_LOG("%s store/path empty", id);
+        return NULL;
+    }
+
+    DommeStore *plan = item->plan;
+    if (plan->count_touched >= plan->count_track) return NULL;
+
+    int32_t pos = mos_rand(plan->count_track - plan->count_touched);
+    int32_t oldpos = pos;
+
+    char *key;
+    DommeFile *dfile;
+    MHASH_ITERATE(plan->mfiles, key, dfile) {
+        if (!dfile->touched) {
+            snprintf(filename, sizeof(filename), "%s%s/%s%s%s",
+                     mnetAppDir(), id, plan->basedir, dfile->dir, dfile->name);
+
+            if (_file_exist(filename)) {
+                strncpy(fileid, dfile->id, LEN_CPUID);
+                if (pos == 0) {
+                    dfile->touched = true;
+                    plan->count_touched++;
+                    return fileid;
+                }
+                pos--;
+            } else {
+                dfile->touched = true;
+                plan->count_touched++;
+            }
+        }
+    }
+
+    if (pos < oldpos) return fileid;
+    else return NULL;
+}
+
+char* omusicArtistIDS(char *id, char *name)
+{
+    if (!id || !name) return NULL;
+
+    char filename[PATH_MAX];
+
+    OmusicNode *item = _makesure_load(id);
+    if (!item) {
+        TINY_LOG("%s store/path empty", id);
+        return NULL;
+    }
+
+    DommeArtist *artist = artistFind(item->plan->artists, name);
+    if (!artist) return NULL;
+
+    MDF *outnode;
+    mdf_init(&outnode);
+
+    int idcount = 0;
+    DommeAlbum *disk;
+    MLIST_ITERATE(artist->albums, disk) {
+        DommeFile *dfile;
+        MLIST_ITERATEB(disk->tracks, dfile) {
+            snprintf(filename, sizeof(filename), "%s%s/%s%s%s",
+                     mnetAppDir(), id, item->plan->basedir, dfile->dir, dfile->name);
+
+            if (_file_exist(filename)) mdf_set_valuef(outnode, "[%d]=%s", idcount++, dfile->id);
+        }
+    }
+
+    mdf_object_2_array(outnode, NULL);
+
+    char *output = mdf_json_export_string(outnode);
+    mdf_destroy(&outnode);
+
+    return output;
+}
+
 char* omusicAlbumIDS(char *id, char *name, char *title)
 {
     if (!id || !name || !title) return NULL;

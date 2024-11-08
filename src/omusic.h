@@ -28,7 +28,10 @@ char* omusicArtist(char *id, char *name);
 char* omusicAlbum(char *id, char *name, char*title);
 
 char* omusicLocation(char *id, char *trackid);
+char* omusicArtistIDS(char *id, char *name);
 char* omusicAlbumIDS(char *id, char *name, char *title);
+/* 返回媒体库内单个已缓存的ID */
+char* omusicLibraryID(char *id);
 
 /* 同步缓存专辑 */
 bool omusicSyncAlbum(char *id, char *name, char *title);
