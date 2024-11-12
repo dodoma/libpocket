@@ -1,5 +1,6 @@
 #include <reef.h>
 
+#include "global.h"
 #include "pocket.h"
 #include "packet.h"
 #include "mnet.h"
@@ -10,6 +11,9 @@ CallbackManager *m_callback = NULL;
 static void (*_user_cbk_server_connectted)(char *id, CLIENT_TYPE type) = NULL;
 static void (*_user_cbk_server_closed)(char *id, CLIENT_TYPE type) = NULL;
 static void (*_user_cbk_connection_lost)(char *id, CLIENT_TYPE type) = NULL;
+static void (*_user_cbk_onreceiving)(char *id, char *fname) = NULL;
+static void (*_user_cbk_onfilereceived)(char *id, char *fname) = NULL;
+static void (*_user_cbk_onreceive_done)(char *id, int filecount) = NULL;
 
 static void* _do(void *arg)
 {
@@ -254,9 +258,42 @@ void callbackSetConnectionLost(void (*callback)(char *id, CLIENT_TYPE type))
     _user_cbk_connection_lost = callback;
 }
 
+void callbackSetOnReceiving(void (*callback)(char *id, char *fname))
+{
+    _user_cbk_onreceiving = callback;
+}
+
+void callbackSetOnFileReceived(void (*callback)(char *id, char *fname))
+{
+    _user_cbk_onfilereceived = callback;
+}
+
+void callbackSetOnReceiveDone(void (*callback)(char *id, int filecount))
+{
+    _user_cbk_onreceive_done = callback;
+}
+
+
 void callbackServerConnectted(char *id, CLIENT_TYPE type)
 {
     if (_user_cbk_server_connectted) _user_cbk_server_connectted(id, type);
+}
+
+void callbackOnReceiving(char *id, char *fname)
+{
+    if (_user_cbk_onreceiving) _user_cbk_onreceiving(id, fname);
+}
+
+void callbackOnFileReceived(MsourceNode *item, char *fname)
+{
+    g_timers = timerAdd(g_timers, 3, false, item, mnetNTSCheck);
+
+    if (_user_cbk_onfilereceived) _user_cbk_onfilereceived(item->id, fname);
+}
+
+void callbackOnReceiveDone(char *id, int filecount)
+{
+    if (_user_cbk_onreceive_done) _user_cbk_onreceive_done(id, filecount);
 }
 
 void callbackEntryFree(void *p)

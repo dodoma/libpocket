@@ -305,6 +305,9 @@ static bool _onbroadcast(char cpuid[LEN_CPUID], char ip[INET_ADDRSTRLEN],
     item->binary.recvlen = 0;
     item->binary.fpbin = NULL;
     item->binary.binlen = 0;
+    item->binary.needToSync = 0;
+    item->binary.syncDone = 0;
+    item->binary.downloading = false;
 
     item->pos = MNET_ONLINE_LAN;
 
@@ -401,6 +404,8 @@ char* mnetDiscovery()
 
 MsourceNode* _source_find(MsourceNode *nodes, char *id)
 {
+    if (!id) return NULL;
+
     MsourceNode *node = nodes;
     while (node) {
         if (node->pos > MNET_ONLINE_TIMER && !strcmp(node->id, id)) return node;
@@ -507,6 +512,34 @@ bool mnetOnConnectionLost(void (*callback)(char *id, CLIENT_TYPE type))
 
     return true;
 }
+
+bool mnetOnReceiving(void (*callback)(char *id, char *name))
+{
+    if (!callback) return false;
+
+    callbackSetOnReceiving(callback);
+
+    return true;
+}
+
+bool mnetOnFileReceived(void (callback)(char *id, char *name))
+{
+    if (!callback) return false;
+
+    callbackSetOnFileReceived(callback);
+
+    return true;
+}
+
+bool mnetOnReceiveDone(void (*callback)(char *id, int filecount))
+{
+    if (!callback) return false;
+
+    callbackSetOnReceiveDone(callback);
+
+    return true;
+}
+
 
 bool mnetSetShuffle(char *id, bool shuffle)
 {
@@ -826,12 +859,18 @@ static void _on_database_check(NetNode *client, bool success, char *errmsg, char
             return;
         }
 
+        item->binary.needToSync = item->binary.syncDone = 0;
+
         MLIST *synclist = mfileBuildSynclist(contrl->base.upnode);
+
+        MDF *datanode;
+        mdf_init(&datanode);
 
         SyncFile *file;
         MLIST_ITERATE(synclist, file) {
-            MDF *datanode;
-            mdf_init(&datanode);
+            item->binary.needToSync++;
+
+            mdf_clear(datanode);
             mdf_set_int_value(datanode, "type", file->type);
             if (file->name) mdf_set_value(datanode, "name", file->name);
             if (file->id) mdf_set_value(datanode, "id", file->id);
@@ -842,12 +881,12 @@ static void _on_database_check(NetNode *client, bool success, char *errmsg, char
             MessagePacket *packet = packetMessageInit(contrl->bufsend, LEN_PACKET_NORMAL);
             size_t sendlen = packetDataFill(packet, FRAME_STORAGE, CMD_SYNC_PULL, datanode);
             packetCRCFill(packet);
-            mdf_destroy(&datanode);
 
             //TINY_LOG("pull %s %s %s %s", file->name, file->id, file->artist, file->album);
             SSEND(contrl->base.fd, contrl->bufsend, sendlen);
         }
 
+        mdf_destroy(&datanode);
         mlist_destroy(&synclist);
     } else {
         /* 等待 music.db 接收完成后同步数据 */
@@ -963,6 +1002,8 @@ bool mnetNTSCheck(void *arg)
     MLIST *synclist = mlist_build_from_textfile(filename, 128);
     if (!synclist) return false;
 
+    int filecount = mlist_length(synclist);
+
     char *id;
     MLIST_ITERATE(synclist, id) {
         bool exist = false;
@@ -980,28 +1021,31 @@ bool mnetNTSCheck(void *arg)
         }
     }
 
-    snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", m_appdir, item->id);
     if (mlist_length(synclist) == 0) {
+        snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", m_appdir, item->id);
         TINY_LOG("All media file DONE. remove %s", filename);
 
+        callbackOnReceiveDone(item->id, filecount);
+
         mlist_destroy(&synclist);
+
         remove(filename);
-
-        return false;
     } else {
-        TINY_LOG("write %s with %d ids", filename, mlist_length(synclist));
+        TINY_LOG("%d ids remain", mlist_length(synclist));
+
+        //if (!item->binary.downloading) mnetSyncTracks(item->id);
 
         mlist_destroy(&synclist);
-        mlist_write_textfile(synclist, filename);
-
-        return true;
     }
+
+    return false;
 }
 
-bool mnetSyncTracks(void *arg)
+bool mnetSyncTracks(char *id)
 {
     struct stat fs;
-    char *id = (char*)arg;
+
+    if (!id) return false;
 
     MsourceNode *item = _source_find(m_sources, id);
     if (!item) return false;
@@ -1011,6 +1055,12 @@ bool mnetSyncTracks(void *arg)
     char filename[PATH_MAX];
     snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", m_appdir, id);
     MLIST *synclist = mlist_build_from_textfile(filename, 128);
+
+    TINY_LOG("sync %d files", mlist_length(synclist));
+
+    if (mlist_length(synclist) == 0) return true;
+
+    item->binary.needToSync = item->binary.syncDone = 0;
 
     MDF *datanode;
     mdf_init(&datanode);
@@ -1022,6 +1072,8 @@ bool mnetSyncTracks(void *arg)
             snprintf(filename, sizeof(filename), "%s%s/%s%s%s",
                      m_appdir, id, item->plan->basedir, mfile->dir, mfile->name);
             if (stat(filename, &fs) != 0) {
+                item->binary.needToSync++;
+
                 mdf_clear(datanode);
                 mdf_set_int_value(datanode, "type", SYNC_RAWFILE);
                 mdf_set_valuef(datanode, "name=%s%s", mfile->dir, mfile->name);
@@ -1038,9 +1090,7 @@ bool mnetSyncTracks(void *arg)
     mlist_destroy(&synclist);
     mdf_destroy(&datanode);
 
-    g_timers = timerAdd(g_timers, 60, false, item, mnetNTSCheck);
-
-    return false;
+    return true;
 }
 
 
@@ -1082,13 +1132,13 @@ int main(int argc, char *argv[])
     sleep(5);
     mnetStoreList("a4204428f3063");
 
-    //sleep(5);
-    //mnetStoreSync("a4204428f3063", "默认媒体库");
-    omusicStoreSelect("a4204428f3063", "默认媒体库");
-
     sleep(5);
+    mnetStoreSync("a4204428f3063", "默认媒体库");
+    //omusicStoreSelect("a4204428f3063", "默认媒体库");
+
+    //sleep(5);
     //TINY_LOG("home: %s", omusicHome("a4204428f3063"));
-    TINY_LOG("home: %s", omusicArtist("a4204428f3063", "U2"));
+    //TINY_LOG("home: %s", omusicArtist("a4204428f3063", "U2"));
     //TINY_LOG("artist: %s", omusicAlbum("a4204428f3063", "U2", "Duals"));
 
 #if 0

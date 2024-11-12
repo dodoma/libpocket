@@ -58,6 +58,36 @@ static bool _disk_cached(OmusicNode *item, DommeAlbum *disk)
     return true;
 }
 
+static int _album_cached_count(OmusicNode *item, DommeAlbum *disk)
+{
+    if (!disk || mlist_length(disk->tracks) == 0) return 0;
+
+    int ccount = 0;
+
+    DommeFile *dfile;
+    MLIST_ITERATE(disk->tracks, dfile) {
+        if (_file_existf("%s%s/%s%s%s", mnetAppDir(), item->id,
+                         item->plan->basedir, dfile->dir, dfile->name))
+            ccount++;
+    }
+
+    return ccount;
+}
+
+static int _artist_cached_count(OmusicNode *item, DommeArtist *artist)
+{
+    if (!artist || mlist_length(artist->albums) == 0) return 0;
+
+    int ccount = 0;
+
+    DommeAlbum *disk;
+    MLIST_ITERATE(artist->albums, disk) {
+        ccount += _album_cached_count(item, disk);
+    }
+
+    return ccount;
+}
+
 OmusicNode* omusicStoreClear(char *id)
 {
     if (!id) return NULL;
@@ -192,8 +222,13 @@ char* omusicHome(char *id)
     MLIST_ITERATE(item->plan->artists, artist) {
         MDF *cnode = mdf_insert_node(anode, NULL, -1);
 
+        double indisk = 0.0;
+        if (artist->count_track > 0)
+            indisk = (float)_artist_cached_count(item, artist) / artist->count_track;
+
         mdf_set_value(cnode, "name", artist->name);
         mdf_set_valuef(cnode, "avt=%sassets/cover/%s", item->libroot, artist->name);
+        mdf_set_double_value(cnode, "cachePercent", indisk);
     }
 
     mdf_object_2_array(anode, NULL);
@@ -223,6 +258,7 @@ char* omusicArtist(char *id, char *name)
     mdf_set_value(outnode, "artist", name);
     mdf_set_int_value(outnode, "countAlbum", mlist_length(artist->albums));
     mdf_set_int_value(outnode, "countTrack", artist->count_track);
+    mdf_set_int_value(outnode, "indisk", _artist_cached_count(item, artist));
     mdf_set_valuef(outnode, "avt=%sassets/cover/%s", item->libroot, artist->name);
 
     MDF *anode = mdf_get_or_create_node(outnode, "albums");
@@ -440,6 +476,81 @@ char* omusicAlbumIDS(char *id, char *name, char *title)
     return output;
 }
 
+bool omusicSyncArtist(char *id, char *name)
+{
+    if (!id || !name) return false;
+
+    OmusicNode *item = _makesure_load(id);
+    if (!item) {
+        TINY_LOG("%s store/path empty", id);
+        return false;
+    }
+
+    DommeArtist *artist = artistFind(item->plan->artists, name);
+    if (!artist) return false;
+
+    int idcount = 0;
+    char filename[PATH_MAX];
+    snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", mnetAppDir(), id);
+    FILE *fp = fopen(filename, "a");
+    if (fp) {
+        DommeAlbum *disk;
+        MLIST_ITERATE(artist->albums, disk) {
+            DommeFile *dfile;
+            MLIST_ITERATEB(disk->tracks, dfile) {
+                if (!_file_existf("%s%s/%s%s%s", mnetAppDir(), item->id,
+                                  item->plan->basedir, dfile->dir, dfile->name)) {
+                    fputs(dfile->id, fp);
+                    fputc('\n', fp);
+                    idcount++;
+                }
+            }
+        }
+
+        fclose(fp);
+    } else {
+        TINY_LOG("open %s for write error %s", filename, strerror(errno));
+        return false;
+    }
+
+    TINY_LOG("write %s with %d ids", filename, idcount);
+
+    mnetSyncTracks(id);
+
+    return true;
+}
+
+int omusicClearArtist(char *id, char *name)
+{
+    char filename[PATH_MAX];
+
+    if (!id || !name) return 0;
+
+    OmusicNode *item = _makesure_load(id);
+    if (!item) {
+        TINY_LOG("%s store/path empty", id);
+        return 0;
+    }
+
+    DommeArtist *artist = artistFind(item->plan->artists, name);
+    if (!artist) return 0;
+
+    int filecount = 0;
+    DommeAlbum *disk;
+    MLIST_ITERATE(artist->albums, disk) {
+        DommeFile *dfile;
+        MLIST_ITERATEB(disk->tracks, dfile) {
+            snprintf(filename, sizeof(filename), "%s%s/%s%s%s", mnetAppDir(), item->id,
+                     item->plan->basedir, dfile->dir, dfile->name);
+            if (remove(filename) == 0) filecount++;
+        }
+    }
+
+    TINY_LOG("remove %d files", filecount);
+
+    return filecount;
+}
+
 bool omusicSyncAlbum(char *id, char *name, char *title)
 {
     if (!id || !name || !title) return false;
@@ -456,16 +567,19 @@ bool omusicSyncAlbum(char *id, char *name, char *title)
     DommeAlbum *disk = albumFind(artist->albums, title);
     if (!disk) return false;
 
+    int idcount = 0;
     char filename[PATH_MAX];
     snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", mnetAppDir(), id);
-
-    TINY_LOG("write %s with %d ids", filename, mlist_length(disk->tracks));
     FILE *fp = fopen(filename, "a");
     if (fp) {
         DommeFile *dfile;
         MLIST_ITERATE(disk->tracks, dfile) {
-            fputs(dfile->id, fp);
-            fputc('\n', fp);
+            if (!_file_existf("%s%s/%s%s%s", mnetAppDir(), item->id,
+                              item->plan->basedir, dfile->dir, dfile->name)) {
+                fputs(dfile->id, fp);
+                fputc('\n', fp);
+                idcount++;
+            }
         }
 
         fclose(fp);
@@ -474,7 +588,39 @@ bool omusicSyncAlbum(char *id, char *name, char *title)
         return false;
     }
 
-    g_timers = timerAdd(g_timers, 1, true, item->id, mnetSyncTracks);
+    TINY_LOG("write %s with %d ids", filename, idcount);
+
+    mnetSyncTracks(id);
 
     return true;
+}
+
+int omusicClearAlbum(char *id, char *name, char *title)
+{
+    char filename[PATH_MAX];
+    if (!id || !name || !title) return 0;
+
+    OmusicNode *item = _makesure_load(id);
+    if (!item) {
+        TINY_LOG("%s store/path empty", id);
+        return 0;
+    }
+
+    DommeArtist *artist = artistFind(item->plan->artists, name);
+    if (!artist) return 0;
+
+    DommeAlbum *disk = albumFind(artist->albums, title);
+    if (!disk) return 0;
+
+    int filecount = 0;
+    DommeFile *dfile;
+    MLIST_ITERATE(disk->tracks, dfile) {
+        snprintf(filename, sizeof(filename), "%s%s/%s%s%s", mnetAppDir(), item->id,
+                 item->plan->basedir, dfile->dir, dfile->name);
+        if (remove(filename) == 0) filecount++;
+    }
+
+    TINY_LOG("remove %d files", filecount);
+
+    return filecount;
 }

@@ -46,7 +46,14 @@ void callbackRegist(uint16_t seqnum, uint16_t command, CONTRL_CALLBACK callback)
 void callbackSetServerConnectted(void (*callback)(char *id, CLIENT_TYPE type));
 void callbackSetServerClosed(void (*callback)(char *id, CLIENT_TYPE type));
 void callbackSetConnectionLost(void (*callback)(char *id, CLIENT_TYPE type));
+void callbackSetOnReceiving(void (*callback)(char *id, char *fname));
+void callbackSetOnFileReceived(void (*callback)(char *id, char *fname));
+void callbackSetOnReceiveDone(void (*callback)(char *id, int filecount));
+
 void callbackServerConnectted(char *id, CLIENT_TYPE type);
+void callbackOnReceiving(char *id, char *fname);
+void callbackOnFileReceived(MsourceNode *item, char *fname);
+void callbackOnReceiveDone(char *id, int filecount);
 
 /*
  * 如果 errmsg, response 不为空，请确保为跨线程安全内存，回调完毕后会自动释放

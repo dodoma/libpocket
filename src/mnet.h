@@ -56,6 +56,9 @@ typedef struct {
 
     FILE *fpbin;
     uint64_t binlen;
+    uint32_t needToSync;
+    uint32_t syncDone;
+    bool downloading;
 } BinNode;
 
 typedef struct _msource_node {
@@ -107,6 +110,9 @@ bool mnetOnStep(char *id, CONTRL_CALLBACK callback);
 bool mnetOnServerConnectted(void (*callback)(char *id, CLIENT_TYPE type));
 bool mnetOnServerClosed(void (*callback)(char *id, CLIENT_TYPE type));
 bool mnetOnConnectionLost(void (*callback)(char *id, CLIENT_TYPE type));
+bool mnetOnReceiving(void (*callback)(char *id, char *name));
+bool mnetOnFileReceived(void (callback)(char *id, char *name));
+bool mnetOnReceiveDone(void (*callback)(char *id, int filecount));
 
 bool mnetSetShuffle(char *id, bool shuffle);
 bool mnetSetVolume(char *id, double volume);
@@ -123,9 +129,9 @@ bool mnetDragTO(char *id, double percent);
 
 bool mnetStoreList(char *id);
 bool mnetStoreSync(char *id, char *storename);
+bool mnetSyncTracks(char *id);
 
 bool mnetNTSCheck(void *arg);
-bool mnetSyncTracks(void *arg);
 
 char* mnetDiscover2();
 

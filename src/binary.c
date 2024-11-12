@@ -28,9 +28,12 @@ static bool _parse_packet(BinNode *client, MessagePacket *packet)
          * \---------------/
          */
         if (packet->command == CMD_SYNC) {
+            static char fnamebuf[256];
+
             /* 文件需要下载 */
             memset(client->tempname, 0x0, sizeof(client->tempname));
             memset(client->filename, 0x0, sizeof(client->filename));
+            memset(fnamebuf, 0x0, sizeof(fnamebuf));
 
             uint8_t *buf = packet->data;
             int slen = strlen((char*)buf);
@@ -39,6 +42,8 @@ static bool _parse_packet(BinNode *client, MessagePacket *packet)
                 break;
             }
 
+            snprintf(fnamebuf, sizeof(fnamebuf), "%d/%d %s",
+                     client->syncDone+1, client->needToSync, (char*)buf);
             snprintf(client->filename, sizeof(client->filename),
                      "%s%s/%s", mnetAppDir(), source->id, (char*)buf);
             buf += slen;
@@ -46,6 +51,10 @@ static bool _parse_packet(BinNode *client, MessagePacket *packet)
 
             client->binlen = *(uint64_t*)buf;
             buf += 8;
+
+            client->downloading = true;
+
+            callbackOnReceiving(source->id, fnamebuf);
 
             TINY_LOG("SYNC %s with %lu bytes...", client->filename, client->binlen);
 
@@ -114,6 +123,7 @@ static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
                 fclose(client->fpbin);
                 client->fpbin = NULL;
                 client->binlen = 0;
+                client->downloading = false;
                 break;
             }
             client->binlen -= writelen;
@@ -122,29 +132,40 @@ static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
                 TINY_LOG("SYNC done.");
                 fclose(client->fpbin);
                 client->fpbin = NULL;
+                client->downloading = false;
+                client->syncDone++;
+                if (client->needToSync == client->syncDone) client->needToSync = client->syncDone = 0;
                 _makesure_directory(client->filename);
                 if (rename(client->tempname, client->filename) != 0)
                     TINY_LOG("rename %s failure %s", client->filename, strerror(errno));
+                else callbackOnFileReceived(client->base.upnode,
+                                            client->filename + strlen(mnetAppDir()) + LEN_CPUID);
                 //unlink(client->tempname);
             }
             return true;
         } else {
             /* 收到的内容比需要保存的文件内容多 */
             writelen = fwrite(recvbuf, 1, client->binlen, client->fpbin);
-            TINY_LOG("%ju bytes write", writelen);
+            //TINY_LOG("%ju bytes write", writelen);
             if (writelen < client->binlen) {
                 TINY_LOG("write error %s", strerror(errno));
                 fclose(client->fpbin);
                 client->fpbin = NULL;
                 client->binlen = 0;
+                client->downloading = false;
                 break;
             }
             TINY_LOG("SYNC done.");
             fclose(client->fpbin);
             client->fpbin = NULL;
+            client->downloading = false;
+            client->syncDone++;
+            if (client->needToSync == client->syncDone) client->needToSync = client->syncDone = 0;
             _makesure_directory(client->filename);
             if (rename(client->tempname, client->filename) != 0)
                 TINY_LOG("rename %s failure %s", client->filename, strerror(errno));
+            else callbackOnFileReceived(client->base.upnode,
+                                        client->filename + strlen(mnetAppDir()) + LEN_CPUID);
             //unlink(client->tempname);
 
             size_t exceed = recvlen - client->binlen;
