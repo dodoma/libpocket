@@ -167,7 +167,7 @@ static OmusicNode* _makesure_load(char *id)
             item->plan->name = strdup(name);
             item->plan->basedir = strdup(path);
 
-            snprintf(filename, sizeof(filename), "%s%s/music.db", item->libroot, path);
+            snprintf(filename, sizeof(filename), "%s%smusic.db", item->libroot, path);
             while ((err = dommeLoadFromFile(filename, item->plan)) != MERR_OK) {
                 TINY_LOG("load %s failure %s, retry", filename, strerror(errno));
                 merr_destroy(&err);
@@ -623,4 +623,36 @@ int omusicClearAlbum(char *id, char *name, char *title)
     TINY_LOG("remove %d files", filecount);
 
     return filecount;
+}
+
+int omusicDeleteAlbum(char *id, char *name, char *title)
+{
+    char filename[PATH_MAX];
+    if (!id || !name || !title) return 0;
+
+    OmusicNode *item = _makesure_load(id);
+    if (!item) {
+        TINY_LOG("%s store/path empty", id);
+        return 0;
+    }
+
+    DommeArtist *artist = artistFind(item->plan->artists, name);
+    if (!artist) return 0;
+
+    DommeAlbum *disk = albumFind(artist->albums, title);
+    if (!disk) return 0;
+
+    DommeFile *dfile;
+    MLIST_ITERATE(disk->tracks, dfile) {
+        snprintf(filename, sizeof(filename), "%s%s/%s%s%s", mnetAppDir(), item->id,
+                 item->plan->basedir, dfile->dir, dfile->name);
+        TINY_LOG("remove %s", filename);
+        remove(filename);
+
+        mnetDeleteTrack(id, dfile->id);
+    }
+
+    TINY_LOG("remove %d files", mlist_length(disk->tracks));
+
+    return mlist_length(disk->tracks);
 }

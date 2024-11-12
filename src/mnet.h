@@ -130,6 +130,7 @@ bool mnetDragTO(char *id, double percent);
 bool mnetStoreList(char *id);
 bool mnetStoreSync(char *id, char *storename);
 bool mnetSyncTracks(char *id);
+bool mnetDeleteTrack(char *id, char *trackid);
 
 bool mnetNTSCheck(void *arg);
 

@@ -1093,6 +1093,30 @@ bool mnetSyncTracks(char *id)
     return true;
 }
 
+bool mnetDeleteTrack(char *id, char *trackid)
+{
+    if (!id || !trackid) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    CtlNode *contrl = &item->contrl;
+
+    MDF *datanode;
+    mdf_init(&datanode);
+
+    mdf_set_value(datanode, "id", trackid);
+
+    MessagePacket *packet = packetMessageInit(contrl->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetDataFill(packet, FRAME_STORAGE, CMD_REMOVE, datanode);
+    packetCRCFill(packet);
+
+    SSEND(contrl->base.fd, contrl->bufsend, sendlen);
+
+    mdf_destroy(&datanode);
+
+    return true;
+}
 
 char* mnetDiscover2()
 {

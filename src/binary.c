@@ -134,7 +134,15 @@ static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
                 client->fpbin = NULL;
                 client->downloading = false;
                 client->syncDone++;
-                if (client->needToSync == client->syncDone) client->needToSync = client->syncDone = 0;
+                if (client->needToSync <= client->syncDone) {
+                    if (client->needToSync == 0) {
+                        /* 不应我请求，服务器主动推送了文件 */
+                        callbackOnReceiveDone(client->base.upnode->id, 1);
+                    } else {
+                        /* 应我请求的推送，完成事件在 mnetNTSCheck（）回调 */
+                    }
+                    client->needToSync = client->syncDone = 0;
+                }
                 _makesure_directory(client->filename);
                 if (rename(client->tempname, client->filename) != 0)
                     TINY_LOG("rename %s failure %s", client->filename, strerror(errno));
@@ -160,7 +168,15 @@ static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
             client->fpbin = NULL;
             client->downloading = false;
             client->syncDone++;
-            if (client->needToSync == client->syncDone) client->needToSync = client->syncDone = 0;
+            if (client->needToSync <= client->syncDone) {
+                if (client->needToSync == 0) {
+                    /* 不应我请求，服务器主动推送了文件 */
+                    callbackOnReceiveDone(client->base.upnode->id, 1);
+                } else {
+                    /* 应我请求的推送，完成事件在 mnetNTSCheck（）回调 */
+                }
+                client->needToSync = client->syncDone = 0;
+            }
             _makesure_directory(client->filename);
             if (rename(client->tempname, client->filename) != 0)
                 TINY_LOG("rename %s failure %s", client->filename, strerror(errno));
