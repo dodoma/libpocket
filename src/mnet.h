@@ -43,6 +43,10 @@ typedef struct {
     uint8_t *bufrecv;
     uint8_t bufsend[LEN_PACKET_NORMAL];
     size_t recvlen;
+
+    /* 同步请求用来等待服务器返回数据用 */
+    pthread_mutex_t lock;
+    pthread_cond_t cond;
 } CtlNode;
 
 typedef struct {
@@ -113,6 +117,7 @@ bool mnetOnConnectionLost(void (*callback)(char *id, CLIENT_TYPE type));
 bool mnetOnReceiving(void (*callback)(char *id, char *name));
 bool mnetOnFileReceived(void (callback)(char *id, char *name));
 bool mnetOnReceiveDone(void (*callback)(char *id, int filecount));
+bool mnetOnUdiskMount(void (*callback)(char *id));
 
 bool mnetSetShuffle(char *id, bool shuffle);
 bool mnetSetVolume(char *id, double volume);
@@ -133,6 +138,9 @@ bool mnetSyncTracks(char *id);
 bool mnetDeleteTrack(char *id, char *trackid);
 
 bool mnetNTSCheck(void *arg);
+
+void mnetOnSyncREQBack(bool success, char *message);
+char* msourceHome(char *id);
 
 char* mnetDiscover2();
 

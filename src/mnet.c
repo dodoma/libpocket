@@ -26,6 +26,8 @@ bool g_dumpsend = false;
 bool g_dumprecv = false;
 
 static char *m_appdir = NULL;
+static uint8_t *m_recvbuf = NULL;
+static bool m_remoteok = false;
 
 /*
  * 争取做到 moc server 与 音源 一套心跳维护逻辑
@@ -209,7 +211,9 @@ bool mnetStart(const char *homedir)
             snprintf(dirname, sizeof(dirname), "%s/", homedir);
             m_appdir = strdup(dirname);
         } else m_appdir = strdup(homedir);
-    }
+    } else m_appdir = "";
+
+    if (!m_recvbuf) m_recvbuf = calloc(1, CONTRL_PACKET_MAX_LEN);
 
     clientInit();
     binaryInit();
@@ -293,6 +297,8 @@ static bool _onbroadcast(char cpuid[LEN_CPUID], char ip[INET_ADDRSTRLEN],
     //
     item->contrl.bufrecv = NULL;
     item->contrl.recvlen = 0;
+    pthread_mutex_init(&item->contrl.lock, NULL);
+    pthread_cond_init(&item->contrl.cond, NULL);
 
     item->binary.base.fd = -1;
     item->binary.base.online = false;
@@ -466,8 +472,8 @@ bool mnetPlayInfo(char *id, CONTRL_CALLBACK callback)
     CtlNode *node = &item->contrl;
 
     MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
-    packet->seqnum = SEQ_PLAY_INFO;
     size_t sendlen = packetNODataFill(packet, FRAME_AUDIO, CMD_PLAY_INFO);
+    packet->seqnum = SEQ_PLAY_INFO;
     packetCRCFill(packet);
 
     callbackRegist(packet->seqnum, packet->command, callback);
@@ -536,6 +542,15 @@ bool mnetOnReceiveDone(void (*callback)(char *id, int filecount))
     if (!callback) return false;
 
     callbackSetOnReceiveDone(callback);
+
+    return true;
+}
+
+bool mnetOnUdiskMount(void (*callback)(char *id))
+{
+    if (!callback) return false;
+
+    callbackSetUdiskMounted(callback);
 
     return true;
 }
@@ -1118,6 +1133,44 @@ bool mnetDeleteTrack(char *id, char *trackid)
     return true;
 }
 
+void mnetOnSyncREQBack(bool success, char *message)
+{
+    m_remoteok = success;
+    if (message) {
+        int slen = strlen(message);
+        memset(m_recvbuf, 0x0, sizeof(m_recvbuf));
+        strncpy(m_recvbuf, message, slen > CONTRL_PACKET_MAX_LEN ? CONTRL_PACKET_MAX_LEN : slen);
+    }
+}
+
+char* msourceHome(char *id)
+{
+    if (!id) return NULL;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return NULL;
+
+    CtlNode *node = &item->contrl;
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetNODataFill(packet, FRAME_HARDWARE, CMD_HOME_INFO);
+    packet->seqnum = SEQ_SYNC_REQ;
+    packetCRCFill(packet);
+    SSEND(node->base.fd, node->bufsend, sendlen);
+
+    struct timespec timeout;
+    clock_gettime(CLOCK_REALTIME, &timeout);
+    timeout.tv_sec += 5;
+    pthread_mutex_lock(&node->lock);
+    int rv = pthread_cond_timedwait(&node->cond, &node->lock, &timeout);
+    pthread_mutex_unlock(&node->lock);
+
+    if (rv == ETIMEDOUT) return NULL;
+    else if (!m_remoteok) return NULL;
+    else return m_recvbuf;
+}
+
+
 char* mnetDiscover2()
 {
     sleep(3);
@@ -1148,16 +1201,18 @@ int main(int argc, char *argv[])
 
     TINY_LOG("%s", id);
     //mnetWifiSet("a4204428f3063", "TPLINK_2323", "123123", "No.419", _on_wifi_setted);
+    char *msg = msourceHome("a4204428f3063");
+    TINY_LOG("xxxxxx %s", msg);
 
     //sleep(5);
     //mnetPlayInfo("a4204428f3063", _on_playing);
     //mnetPlay("a4204428f3063");
 
-    sleep(5);
-    mnetStoreList("a4204428f3063");
+    //sleep(5);
+    //mnetStoreList("a4204428f3063");
 
-    sleep(5);
-    mnetStoreSync("a4204428f3063", "默认媒体库");
+    //sleep(5);
+    //mnetStoreSync("a4204428f3063", "默认媒体库");
     //omusicStoreSelect("a4204428f3063", "默认媒体库");
 
     //sleep(5);

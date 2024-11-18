@@ -14,6 +14,7 @@ static void (*_user_cbk_connection_lost)(char *id, CLIENT_TYPE type) = NULL;
 static void (*_user_cbk_onreceiving)(char *id, char *fname) = NULL;
 static void (*_user_cbk_onfilereceived)(char *id, char *fname) = NULL;
 static void (*_user_cbk_onreceive_done)(char *id, int filecount) = NULL;
+static void (*_user_cbk_udisk_mounted)(char *id) = NULL;
 
 static void* _do(void *arg)
 {
@@ -52,23 +53,36 @@ static void* _do(void *arg)
         pthread_mutex_unlock(&queue->lock);
 
         if (qentry) {
-            MDLIST *dlist = mdlist_head(m_callback->callbacks);
-            while (dlist) {
-                CallbackEntry *centry = (CallbackEntry*)mdlist_data(dlist);
-                if (centry->seqnum == qentry->seqnum) {
-                    centry->callback(qentry->client, qentry->success, qentry->errmsg,
-                                     qentry->response);
+            if (qentry->seqnum == SEQ_SYNC_REQ) {
+                /* 网络包延时或者服务器卡住，导致多个同步请求可能会串包。(也只是可能，出现后再说) */
 
-                    if (centry->seqnum >= SEQ_USER_START) mdlist_eject(dlist, callbackEntryFree);
+                /* 注意：目前只有 contrl client 支持同步请求 */
+                CtlNode *node = (CtlNode*)qentry->client;
+                pthread_mutex_lock(&node->lock);
+                if (qentry->success) mnetOnSyncREQBack(true, qentry->response);
+                else mnetOnSyncREQBack(false, qentry->errmsg);
+                pthread_cond_signal(&node->cond);
+                pthread_mutex_unlock(&node->lock);
+            } else {
+                MDLIST *dlist = mdlist_head(m_callback->callbacks);
+                while (dlist) {
+                    CallbackEntry *centry = (CallbackEntry*)mdlist_data(dlist);
+                    if (centry->seqnum == qentry->seqnum) {
+                        centry->callback(qentry->client, qentry->success, qentry->errmsg,
+                                         qentry->response);
 
-                    queueEntryFree(qentry);
-                    goto done;
+                        if (centry->seqnum >= SEQ_USER_START) mdlist_eject(dlist, callbackEntryFree);
+
+                        queueEntryFree(qentry);
+                        goto done;
+                    }
+
+                    dlist = mdlist_next(dlist);
                 }
 
-                dlist = mdlist_next(dlist);
+                TINY_LOG("whoops, callback %d uneixst", qentry->seqnum);
             }
 
-            TINY_LOG("whoops, callback %d uneixst", qentry->seqnum);
             queueEntryFree(qentry);
 
         done:
@@ -273,6 +287,11 @@ void callbackSetOnReceiveDone(void (*callback)(char *id, int filecount))
     _user_cbk_onreceive_done = callback;
 }
 
+void callbackSetUdiskMounted(void (*callback)(char *id))
+{
+    _user_cbk_udisk_mounted = callback;
+}
+
 
 void callbackServerConnectted(char *id, CLIENT_TYPE type)
 {
@@ -294,6 +313,11 @@ void callbackOnFileReceived(MsourceNode *item, char *fname)
 void callbackOnReceiveDone(char *id, int filecount)
 {
     if (_user_cbk_onreceive_done) _user_cbk_onreceive_done(id, filecount);
+}
+
+void callbackUdiskMounted(char *id)
+{
+    if (_user_cbk_udisk_mounted) _user_cbk_udisk_mounted(id);
 }
 
 void callbackEntryFree(void *p)

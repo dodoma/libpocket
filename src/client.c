@@ -138,6 +138,9 @@ static bool _parse_recv(CtlNode *client, uint8_t *recvbuf, size_t recvlen)
         case IDIOT_PLAY_STEP:
             callbackOn((NetNode*)client, SEQ_PLAY_STEP, 0, true, NULL, NULL);
             break;
+        case IDIOT_USTICK_MOUNT:
+            callbackUdiskMounted(client->base.upnode->id);
+            break;
         default:
             TINY_LOG("unsupport idot packet %d", ipacket->idiot);
             break;
