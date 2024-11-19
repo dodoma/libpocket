@@ -27,6 +27,7 @@ bool g_dumprecv = false;
 
 static char *m_appdir = NULL;
 static uint8_t *m_recvbuf = NULL;
+static bool m_remotedone = false;
 static bool m_remoteok = false;
 
 /*
@@ -1135,6 +1136,7 @@ bool mnetDeleteTrack(char *id, char *trackid)
 
 void mnetOnSyncREQBack(bool success, char *message)
 {
+    m_remotedone = true;
     m_remoteok = success;
     if (message) {
         int slen = strlen(message);
@@ -1145,12 +1147,16 @@ void mnetOnSyncREQBack(bool success, char *message)
 
 char* msourceHome(char *id)
 {
+    int rv = 0;
+
     if (!id) return NULL;
 
     MsourceNode *item = _source_find(m_sources, id);
     if (!item) return NULL;
 
     CtlNode *node = &item->contrl;
+
+    m_remotedone = false;
 
     MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
     size_t sendlen = packetNODataFill(packet, FRAME_HARDWARE, CMD_HOME_INFO);
@@ -1161,13 +1167,26 @@ char* msourceHome(char *id)
     struct timespec timeout;
     clock_gettime(CLOCK_REALTIME, &timeout);
     timeout.tv_sec += 5;
+
+    /*
+     * https://stackoverflow.com/questions/8594591/why-does-pthread-cond-wait-have-spurious-wakeups
+     */
     pthread_mutex_lock(&node->lock);
-    int rv = pthread_cond_timedwait(&node->cond, &node->lock, &timeout);
+    while (!m_remotedone) {
+        rv = pthread_cond_timedwait(&node->cond, &node->lock, &timeout);
+        if (rv == ETIMEDOUT) {
+            pthread_mutex_unlock(&node->lock);
+
+            TINY_LOG("trigger sync timeout");
+            return NULL;
+        }
+    }
     pthread_mutex_unlock(&node->lock);
 
-    if (rv == ETIMEDOUT) return NULL;
-    else if (!m_remoteok) return NULL;
-    else return m_recvbuf;
+    if (rv != 0) {
+        TINY_LOG("trigger sync nok %d %d %s", m_remotedone, rv, strerror(errno));
+        return NULL;
+    } else return m_recvbuf;
 }
 
 
