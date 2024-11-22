@@ -1289,6 +1289,55 @@ char* msourceLibraryRename(char *id, char *nameold, char *namenew)
     } else return NULL;
 }
 
+char* msourceLibrarySetDefault(char *id, char *libname)
+{
+    int rv = 0;
+
+    if (!id || !libname) return "参数错误";
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return "音源离线";
+
+    CtlNode *node = &item->contrl;
+
+    m_remotedone = false;
+
+    MDF *datanode;
+    mdf_init(&datanode);
+    mdf_set_value(datanode, "name", libname);
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetDataFill(packet, FRAME_HARDWARE, CMD_STORE_SET_DEFAULT, datanode);
+    packet->seqnum = SEQ_SYNC_REQ;
+    packetCRCFill(packet);
+    SSEND(node->base.fd, node->bufsend, sendlen);
+
+    mdf_destroy(&datanode);
+
+    struct timespec timeout;
+    clock_gettime(CLOCK_REALTIME, &timeout);
+    timeout.tv_sec += 5;
+
+    pthread_mutex_lock(&node->lock);
+    while (!m_remotedone) {
+        rv = pthread_cond_timedwait(&node->cond, &node->lock, &timeout);
+        if (rv == ETIMEDOUT) {
+            pthread_mutex_unlock(&node->lock);
+
+            TINY_LOG("trigger sync timeout");
+            return "音源无响应";
+        }
+    }
+    pthread_mutex_unlock(&node->lock);
+
+    if (rv != 0) {
+        TINY_LOG("trigger sync nok %d %d %s", m_remotedone, rv, strerror(errno));
+        return "内部错误";
+    } else if (!m_remoteok) {
+        return m_recvbuf;
+    } else return NULL;
+}
+
 
 char* mnetDiscover2()
 {
