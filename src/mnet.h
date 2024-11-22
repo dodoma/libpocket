@@ -134,6 +134,8 @@ bool mnetDragTO(char *id, double percent);
 
 bool mnetStoreList(char *id);
 bool mnetStoreSync(char *id, char *storename);
+/* 不管三七二十一，同步媒体库下所有媒体文件 */
+bool mnetStoreSyncMEDIA_ANYWAY(char *id, char *storename);
 bool mnetSyncTracks(char *id);
 bool mnetDeleteTrack(char *id, char *trackid);
 

@@ -33,6 +33,9 @@ char* omusicAlbumIDS(char *id, char *name, char *title);
 /* 返回媒体库内单个已缓存的ID */
 char* omusicLibraryID(char *id);
 
+bool omusicSyncStore(char *id, char *storename);
+int omusicClearStore(char *id, char *storename);
+
 /* 同步缓存艺术家 */
 bool omusicSyncArtist(char *id, char *name);
 int omusicClearArtist(char *id, char *name);

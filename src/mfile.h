@@ -7,6 +7,7 @@
 
 typedef enum {
     SYNC_RAWFILE = 0,
+    SYNC_STORE_FILE,
     SYNC_TRACK_COVER,
     SYNC_ARTIST_COVER,
     SYNC_ALBUM_COVER,

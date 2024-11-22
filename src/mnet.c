@@ -1000,6 +1000,30 @@ bool mnetStoreSync(char *id, char *storename)
     return true;
 }
 
+bool mnetStoreSyncMEDIA_ANYWAY(char *id, char *storename)
+{
+    if (!id || !storename) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    CtlNode *node = &item->contrl;
+
+    MDF *datanode;
+    mdf_init(&datanode);
+    mdf_set_bool_value(datanode, "name", storename);
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetDataFill(packet, FRAME_STORAGE, CMD_SYNC_STORE, datanode);
+    packetCRCFill(packet);
+
+    SSEND(node->base.fd, node->bufsend, sendlen);
+
+    mdf_destroy(&datanode);
+
+    return true;
+}
+
 /*
  * 用户通过专辑或者艺术及勾选需要同步的音频文件后，id列表保存至了 setting/needToSync 中
  * 无论是切换媒体库时同步，还是设置后触发的同步，就只管同步
@@ -1020,9 +1044,17 @@ bool mnetNTSCheck(void *arg)
 
     int filecount = mlist_length(synclist);
 
+    bool exist = false;
     char *id;
     MLIST_ITERATE(synclist, id) {
-        bool exist = false;
+        exist = false;
+
+        /* 按理说 dommeGetFile 获取不到此id文件，加上以下判断只为逻辑更加严谨 */
+        if (!memcmp(id, "STOREMARK", 9)) {
+            mlist_delete(synclist, _moon_i);
+            _moon_i--;
+            continue;
+        }
 
         DommeFile *mfile = dommeGetFile(plan, id);
         if (mfile) {
@@ -1060,6 +1092,7 @@ bool mnetNTSCheck(void *arg)
 bool mnetSyncTracks(char *id)
 {
     struct stat fs;
+    MERR *err;
 
     if (!id) return false;
 
@@ -1081,18 +1114,68 @@ bool mnetSyncTracks(char *id)
     MDF *datanode;
     mdf_init(&datanode);
 
+    DommeStore *plan = item->plan;
+    bool createplan = false;
     char *fileid;
     MLIST_ITERATE(synclist, fileid) {
-        DommeFile *mfile = dommeGetFile(item->plan, fileid);
+        /* 找到合适的媒体库 */
+        if (!memcmp(fileid, "STOREMARK", 9)) {
+            if (!strcmp(fileid, "STOREMARK")) {
+                if (createplan) {
+                    createplan = false;
+                    dommeStoreFree(plan);
+                }
+
+                plan = item->plan;
+            } else {
+                char *storename = fileid + strlen("STOREMARK");
+                while (isspace(*storename)) storename++;
+
+                if (!storename || *storename == '\0') {
+                    TINY_LOG("storename not found");
+                    plan = NULL;
+                    continue;
+                }
+
+                MDF *snode = mdf_search(item->dbnode, storename, _store_compare);
+                if (!snode) {
+                    TINY_LOG("find store %s failure", storename);
+                    plan = NULL;
+                    continue;
+                }
+
+                plan = dommeStoreCreate();
+                plan->name = strdup(storename);
+                plan->basedir = mdf_get_value_copy(snode, "path", "");
+
+                snprintf(filename, sizeof(filename), "%s%s/%smusic.db",
+                         m_appdir, item->id, plan->basedir);
+                err = dommeLoadFromFile(filename, plan);
+                if (err != MERR_OK) {
+                    TINY_LOG("load db %s failure %s", filename, strerror(errno));
+                    merr_destroy(&err);
+                    dommeStoreFree(plan);
+                    plan = NULL;
+                    continue;
+                }
+
+                createplan = true;
+            }
+
+            continue;
+        }
+
+        /* 找到媒体库下的文件 */
+        DommeFile *mfile = dommeGetFile(plan, fileid);
         if (mfile) {
             snprintf(filename, sizeof(filename), "%s%s/%s%s%s",
-                     m_appdir, id, item->plan->basedir, mfile->dir, mfile->name);
+                     m_appdir, id, plan->basedir, mfile->dir, mfile->name);
             if (stat(filename, &fs) != 0) {
                 item->binary.needToSync++;
 
                 mdf_clear(datanode);
                 mdf_set_int_value(datanode, "type", SYNC_RAWFILE);
-                mdf_set_valuef(datanode, "name=%s%s", mfile->dir, mfile->name);
+                mdf_set_valuef(datanode, "name=%s%s%s", plan->basedir, mfile->dir, mfile->name);
 
                 MessagePacket *packet = packetMessageInit(contrl->bufsend, LEN_PACKET_NORMAL);
                 size_t sendlen = packetDataFill(packet, FRAME_STORAGE, CMD_SYNC_PULL, datanode);

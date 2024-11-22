@@ -476,6 +476,142 @@ char* omusicAlbumIDS(char *id, char *name, char *title)
     return output;
 }
 
+bool omusicSyncStore(char *id, char *storename)
+{
+    char filename[PATH_MAX];
+    MERR *err;
+    if (!id || !storename) return false;
+
+    MDF *libconfig;
+    mdf_init(&libconfig);
+
+    snprintf(filename, sizeof(filename), "%s%s/config.json", mnetAppDir(), id);
+    err = mdf_json_import_file(libconfig, filename);
+    RETURN_V_NOK(err, false);
+
+    MDF *snode = mdf_search(libconfig, storename, _store_compare);
+    if (!snode) {
+        TINY_LOG("find %s failure", storename);
+        return false;
+    }
+
+    char *name = mdf_get_value(snode, "name", NULL);
+    char *path = mdf_get_value(snode, "path", NULL);
+    if (!name || !path) {
+        TINY_LOG("path not found");
+        return false;
+    }
+
+    DommeStore *plan = dommeStoreCreate();
+    plan->name = strdup(name);
+    plan->basedir = strdup(path);
+    snprintf(filename, sizeof(filename), "%s%s/%smusic.db", mnetAppDir(), id, plan->basedir);
+    err = dommeLoadFromFile(filename, plan);
+    if (err) {
+        TINY_LOG("媒体库 %s 下的数据库还没同步，先同步整库媒体文件", storename);
+
+        merr_destroy(&err);
+        mdf_destroy(&libconfig);
+        dommeStoreFree(plan);
+
+        return mnetStoreSyncMEDIA_ANYWAY(id, storename);
+    }
+
+    mdf_destroy(&libconfig);
+
+    int idcount = 0;
+    snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", mnetAppDir(), id);
+    FILE *fp = fopen(filename, "a");
+    if (fp) {
+        /* 用户操作手速有限，哥就不加锁了 */
+        fprintf(fp, "STOREMARK %s\n", storename);
+
+        char *key;
+        DommeFile *dfile;
+        MHASH_ITERATE(plan->mfiles, key, dfile) {
+            if (!_file_existf("%s%s/%s%s%s",
+                              mnetAppDir(), id, plan->basedir, dfile->dir, dfile->name)) {
+                fputs(dfile->id, fp);
+                fputc('\n', fp);
+                idcount++;
+            }
+        }
+
+        fputs("STOREMARK\n", fp);
+        fclose(fp);
+        dommeStoreFree(plan);
+    } else {
+        TINY_LOG("open %s for write error %s", filename, strerror(errno));
+        dommeStoreFree(plan);
+        return false;
+    }
+
+    TINY_LOG("write %s with %d ids", filename, idcount);
+
+    mnetSyncTracks(id);
+
+    return true;
+}
+
+int omusicClearStore(char *id, char *storename)
+{
+    char filename[PATH_MAX];
+    MERR *err;
+    if (!id || !storename) return 0;
+
+    MDF *libconfig;
+    mdf_init(&libconfig);
+
+    snprintf(filename, sizeof(filename), "%s%s/config.json", mnetAppDir(), id);
+    err = mdf_json_import_file(libconfig, filename);
+    RETURN_V_NOK(err, 0);
+
+    MDF *snode = mdf_search(libconfig, storename, _store_compare);
+    if (!snode) {
+        TINY_LOG("find %s failure", storename);
+        return 0;
+    }
+
+    char *name = mdf_get_value(snode, "name", NULL);
+    char *path = mdf_get_value(snode, "path", NULL);
+    if (!name || !path) {
+        TINY_LOG("path not found");
+        return 0;
+    }
+
+    DommeStore *plan = dommeStoreCreate();
+    plan->name = strdup(name);
+    plan->basedir = strdup(path);
+    snprintf(filename, sizeof(filename), "%s%s/%smusic.db", mnetAppDir(), id, plan->basedir);
+    err = dommeLoadFromFile(filename, plan);
+    if (err) {
+        TINY_LOG("load %s db failure", storename);
+
+        merr_destroy(&err);
+        mdf_destroy(&libconfig);
+        dommeStoreFree(plan);
+
+        return 0;
+    }
+
+    mdf_destroy(&libconfig);
+
+    int filecount = 0;
+    char *key;
+    DommeFile *dfile;
+    MHASH_ITERATE(plan->mfiles, key, dfile) {
+        snprintf(filename, sizeof(filename), "%s%s/%s%s%s", mnetAppDir(), id,
+                 plan->basedir, dfile->dir, dfile->name);
+        if (remove(filename) == 0) filecount++;
+    }
+
+    TINY_LOG("remove %d files", filecount);
+
+    dommeStoreFree(plan);
+
+    return filecount;
+}
+
 bool omusicSyncArtist(char *id, char *name)
 {
     if (!id || !name) return false;
@@ -494,6 +630,8 @@ bool omusicSyncArtist(char *id, char *name)
     snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", mnetAppDir(), id);
     FILE *fp = fopen(filename, "a");
     if (fp) {
+        fprintf(fp, "STOREMARK %s\n", item->plan->name);
+
         DommeAlbum *disk;
         MLIST_ITERATE(artist->albums, disk) {
             DommeFile *dfile;
@@ -507,6 +645,7 @@ bool omusicSyncArtist(char *id, char *name)
             }
         }
 
+        fputs("STOREMARK\n", fp);
         fclose(fp);
     } else {
         TINY_LOG("open %s for write error %s", filename, strerror(errno));
@@ -572,6 +711,8 @@ bool omusicSyncAlbum(char *id, char *name, char *title)
     snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", mnetAppDir(), id);
     FILE *fp = fopen(filename, "a");
     if (fp) {
+        fprintf(fp, "STOREMARK %s\n", item->plan->name);
+
         DommeFile *dfile;
         MLIST_ITERATE(disk->tracks, dfile) {
             if (!_file_existf("%s%s/%s%s%s", mnetAppDir(), item->id,
@@ -582,6 +723,7 @@ bool omusicSyncAlbum(char *id, char *name, char *title)
             }
         }
 
+        fputs("STOREMARK\n", fp);
         fclose(fp);
     } else {
         TINY_LOG("open %s for write error %s", filename, strerror(errno));

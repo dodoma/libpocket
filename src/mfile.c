@@ -126,6 +126,9 @@ MLIST* mfileBuildSynclist(MsourceNode *item)
     MLIST *needToSync = mlist_build_from_textfile(filename, 128);
     char *id;
     MLIST_ITERATE(needToSync, id) {
+        /* 拉取已选媒体库下媒体文件，此处忽略 STOREMARK 指令 */
+        if (!memcmp(id, "STOREMARK", 9)) continue;
+
         dfile = dommeGetFile(plan, id);
         if (dfile) {
             char tok[512];
@@ -133,7 +136,7 @@ MLIST* mfileBuildSynclist(MsourceNode *item)
             snprintf(filename, sizeof(filename), "%s%s/%s%s%s",
                      mnetAppDir(), item->id, plan->basedir, dfile->dir, dfile->name);
             if (stat(filename, &fs) != 0)
-                mlist_append(synclist, _syncNew(tok, NULL, NULL, NULL, SYNC_RAWFILE));
+                mlist_append(synclist, _syncNew(tok, NULL, NULL, NULL, SYNC_STORE_FILE));
         }
     }
     mlist_destroy(&needToSync);
