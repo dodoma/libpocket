@@ -144,6 +144,7 @@ char* msourceHome(char *id);
 
 /* 正常创建返回NULL，否则返回失败原因(不用free) */
 char* msourceLibraryCreate(char *id, char *libname);
+char* msourceLibraryRename(char *id, char *nameold, char *namenew);
 
 char* mnetDiscover2();
 

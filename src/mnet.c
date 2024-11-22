@@ -1136,13 +1136,14 @@ bool mnetDeleteTrack(char *id, char *trackid)
 
 void mnetOnSyncREQBack(bool success, char *message)
 {
-    m_remotedone = true;
-    m_remoteok = success;
     if (message) {
         int slen = strlen(message);
-        memset(m_recvbuf, 0x0, sizeof(m_recvbuf));
+        memset(m_recvbuf, 0x0, CONTRL_PACKET_MAX_LEN);
         strncpy(m_recvbuf, message, slen > CONTRL_PACKET_MAX_LEN ? CONTRL_PACKET_MAX_LEN : slen);
     }
+
+    m_remoteok = success;
+    m_remotedone = true;
 }
 
 char* msourceHome(char *id)
@@ -1237,6 +1238,57 @@ char* msourceLibraryCreate(char *id, char *libname)
         return m_recvbuf;
     } else return NULL;
 }
+
+char* msourceLibraryRename(char *id, char *nameold, char *namenew)
+{
+    int rv = 0;
+
+    if (!id || !nameold || !namenew) return "参数错误";
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return "音源离线";
+
+    CtlNode *node = &item->contrl;
+
+    m_remotedone = false;
+
+    MDF *datanode;
+    mdf_init(&datanode);
+    mdf_set_value(datanode, "from", nameold);
+    mdf_set_value(datanode, "to", namenew);
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetDataFill(packet, FRAME_HARDWARE, CMD_STORE_RENAME, datanode);
+    packet->seqnum = SEQ_SYNC_REQ;
+    packetCRCFill(packet);
+    SSEND(node->base.fd, node->bufsend, sendlen);
+
+    mdf_destroy(&datanode);
+
+    struct timespec timeout;
+    clock_gettime(CLOCK_REALTIME, &timeout);
+    timeout.tv_sec += 5;
+
+    pthread_mutex_lock(&node->lock);
+    while (!m_remotedone) {
+        rv = pthread_cond_timedwait(&node->cond, &node->lock, &timeout);
+        if (rv == ETIMEDOUT) {
+            pthread_mutex_unlock(&node->lock);
+
+            TINY_LOG("trigger sync timeout");
+            return "音源无响应";
+        }
+    }
+    pthread_mutex_unlock(&node->lock);
+
+    if (rv != 0) {
+        TINY_LOG("trigger sync nok %d %d %s", m_remotedone, rv, strerror(errno));
+        return "内部错误";
+    } else if (!m_remoteok) {
+        return m_recvbuf;
+    } else return NULL;
+}
+
 
 char* mnetDiscover2()
 {
