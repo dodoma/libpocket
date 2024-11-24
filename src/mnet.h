@@ -148,6 +148,8 @@ char* msourceHome(char *id);
 char* msourceLibraryCreate(char *id, char *libname);
 char* msourceLibraryRename(char *id, char *nameold, char *namenew);
 char* msourceLibrarySetDefault(char *id, char *libname);
+char* msourceLibraryDelete(char *id, char *storename, bool force);
+char* msourceLibraryMerge(char *id, char *libsrc, char *libdst);
 
 char* mnetDiscover2();
 
