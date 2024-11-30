@@ -34,7 +34,7 @@ char* omusicAlbumIDS(char *id, char *name, char *title);
 char* omusicLibraryID(char *id);
 
 bool omusicSyncStore(char *id, char *storename);
-int omusicClearStore(char *id, char *storename);
+int omusicClearStore(char *id, char *storename, bool rmdir);
 
 /* 同步缓存艺术家 */
 bool omusicSyncArtist(char *id, char *name);

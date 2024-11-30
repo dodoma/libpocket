@@ -553,7 +553,7 @@ bool omusicSyncStore(char *id, char *storename)
     return true;
 }
 
-int omusicClearStore(char *id, char *storename)
+int omusicClearStore(char *id, char *storename, bool rmdir)
 {
     char filename[PATH_MAX];
     MERR *err;
@@ -606,6 +606,11 @@ int omusicClearStore(char *id, char *storename)
     }
 
     TINY_LOG("remove %d files", filecount);
+
+    if (rmdir) {
+
+        mos_rmrff("%s%s/%s", mnetAppDir(), id, plan->basedir);
+    }
 
     dommeStoreFree(plan);
 

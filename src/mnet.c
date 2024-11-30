@@ -826,6 +826,24 @@ static void _on_store_list(NetNode *client, bool success, char *errmsg, char *re
     mdf_json_import_string(item->dbnode, response);
 
     mdf_json_export_filef(item->dbnode, "%s%s/config.json", m_appdir, item->id);
+
+    /* 确保新建的媒体库下有数据库文件，不会因为传输延时造成APP死循环(_makesure_load()) */
+    char filename[PATH_MAX];
+    MDF *cnode = mdf_node_child(item->dbnode);
+    while (cnode) {
+        char *path = mdf_get_value(cnode, "path", NULL);
+        if (path) {
+            snprintf(filename, sizeof(filename), "%s%s/%smusic.db", m_appdir, item->id, path);
+            if (access(filename, F_OK) != 0) {
+                TINY_LOG("create %s", filename);
+                mos_mkdirf(0755, "%s%s/%s", m_appdir, item->id, path);
+                int fd = open(filename, O_WRONLY | O_CREAT | O_EXCL, 0644);
+                if (fd != -1) close(fd);
+            }
+        }
+
+        cnode = mdf_node_next(cnode);
+    }
 }
 
 bool mnetStoreList(char *id)
@@ -1273,6 +1291,56 @@ char* msourceHome(char *id)
     } else return m_recvbuf;
 }
 
+char* msourceDirectoryInfo(char *id, char *path)
+{
+    int rv = 0;
+
+    if (!id || !path) return NULL;
+
+    /* skip ahead '/' */
+    while (*path == '/') path++;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return NULL;
+
+    CtlNode *node = &item->contrl;
+
+    m_remotedone = false;
+
+    MDF *datanode;
+    mdf_init(&datanode);
+    mdf_set_value(datanode, "directory", path);
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetDataFill(packet, FRAME_HARDWARE, CMD_UDISK_INFO, datanode);
+    packet->seqnum = SEQ_SYNC_REQ;
+    packetCRCFill(packet);
+    SSEND(node->base.fd, node->bufsend, sendlen);
+
+    mdf_destroy(&datanode);
+
+    struct timespec timeout;
+    clock_gettime(CLOCK_REALTIME, &timeout);
+    timeout.tv_sec += 5;
+
+    pthread_mutex_lock(&node->lock);
+    while (!m_remotedone) {
+        rv = pthread_cond_timedwait(&node->cond, &node->lock, &timeout);
+        if (rv == ETIMEDOUT) {
+            pthread_mutex_unlock(&node->lock);
+
+            TINY_LOG("trigger sync timeout");
+            return NULL;
+        }
+    }
+    pthread_mutex_unlock(&node->lock);
+
+    if (rv != 0) {
+        TINY_LOG("trigger sync nok %d %d %s", m_remotedone, rv, strerror(errno));
+        return NULL;
+    } else return m_recvbuf;
+}
+
 char* msourceLibraryCreate(char *id, char *libname)
 {
     int rv = 0;
@@ -1522,6 +1590,34 @@ char* msourceLibraryMerge(char *id, char *libsrc, char *libdst)
     } else return NULL;
 }
 
+bool msourceMediaCopy(char *id, char *path, char *libname, bool recursive)
+{
+    if (!id || !path || !libname) return false;
+
+    while (*path == '/') path++;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    CtlNode *node = &item->contrl;
+
+    MDF *datanode;
+    mdf_init(&datanode);
+    mdf_set_value(datanode, "path", path);
+    mdf_set_value(datanode, "name", libname);
+    mdf_set_bool_value(datanode, "recursive", recursive);
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetDataFill(packet, FRAME_HARDWARE, CMD_UDISK_COPY, datanode);
+    packetCRCFill(packet);
+
+    SSEND(node->base.fd, node->bufsend, sendlen);
+
+    mdf_destroy(&datanode);
+
+    return true;
+}
+
 
 char* mnetDiscover2()
 {
@@ -1557,9 +1653,10 @@ int main(int argc, char *argv[])
     //TINY_LOG("xxxxxx %s", msg);
 
     sleep(5);
-    char *msg = msourceLibraryCreate("a4204428f3063", "测试媒体库2");
-    if (msg) TINY_LOG("create failure %s", msg);
-    else TINY_LOG("create ok");
+    //char *msg = msourceLibraryCreate("a4204428f3063", "测试媒体库2");
+    char *msg = msourceDirectoryInfo("a4204428f3063", "music/0701/");
+    if (msg) TINY_LOG("DIR %s", msg);
+    else TINY_LOG("list dir failure");
 
     //mnetPlayInfo("a4204428f3063", _on_playing);
     //mnetPlay("a4204428f3063");

@@ -85,6 +85,11 @@ typedef struct _msource_node {
 
 typedef void (*CONTRL_CALLBACK)(NetNode *client, bool success, char *errmsg, char *response);
 
+/* ==== 内部使用 ==== */
+bool mnetNTSCheck(void *arg);
+void mnetOnSyncREQBack(bool success, char *message);
+
+
 /*
  * 启动网络监控线程
  * 调且仅能调用一次
@@ -139,10 +144,9 @@ bool mnetStoreSyncMEDIA_ANYWAY(char *id, char *storename);
 bool mnetSyncTracks(char *id);
 bool mnetDeleteTrack(char *id, char *trackid);
 
-bool mnetNTSCheck(void *arg);
-
-void mnetOnSyncREQBack(bool success, char *message);
+/* 失败返回NULL，正常返回业务数据 */
 char* msourceHome(char *id);
+char* msourceDirectoryInfo(char *id, char *path);
 
 /* 正常创建返回NULL，否则返回失败原因(不用free) */
 char* msourceLibraryCreate(char *id, char *libname);
@@ -150,6 +154,8 @@ char* msourceLibraryRename(char *id, char *nameold, char *namenew);
 char* msourceLibrarySetDefault(char *id, char *libname);
 char* msourceLibraryDelete(char *id, char *storename, bool force);
 char* msourceLibraryMerge(char *id, char *libsrc, char *libdst);
+
+bool msourceMediaCopy(char *id, char *path, char *libname, bool recursive);
 
 char* mnetDiscover2();
 
