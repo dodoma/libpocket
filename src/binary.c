@@ -210,7 +210,7 @@ static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
         if (recvlen > LEN_IDIOT) {
             memmove(recvbuf, recvbuf + LEN_IDIOT, recvlen - LEN_IDIOT);
             return _parse_recv(client, recvbuf, recvlen - LEN_IDIOT);
-        }
+        } else mos_free(client->bufrecv);
     } else {
         if (recvlen < LEN_HEADER + 1 + 4) PARTLY_PACKET;
 
@@ -229,7 +229,7 @@ static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
                     size_t exceed = recvlen - packet->length;
                     memmove(recvbuf, recvbuf + packet->length, exceed);
                     return _parse_recv(client, recvbuf, exceed);
-                }
+                } else mos_free(client->bufrecv);
             }
         } else {
             TINY_LOG("packet error");
