@@ -19,6 +19,7 @@
 
 time_t g_ctime, g_starton, g_elapsed;
 
+pthread_t m_timer;
 pthread_t m_worker;
 MsourceNode *m_sources = NULL;
 
@@ -136,6 +137,40 @@ static void _timer_handler(int fd)
     }
 }
 
+static void* el_timer(void *arg)
+{
+    int timerfd = *(int*)arg;
+
+    fd_set readset;
+    int maxfd, rv;
+
+    TINY_LOG("start timer routine with timerfd %d", timerfd);
+
+    while (true) {
+        FD_ZERO(&readset);
+
+        if (timerfd > 0) {
+            FD_SET(timerfd, &readset);
+            maxfd = timerfd;
+        }
+
+        struct timeval tv = {.tv_sec = 0, .tv_usec = 100000};
+        rv = select(maxfd + 1, &readset, NULL, NULL, &tv);
+        //TINY_LOG("select return %d", rv);
+
+        if (rv == -1 && errno != EINTR) {
+            TINY_LOG("select error %s", strerror(errno));
+            break;
+        } else if (rv == 0) continue;
+
+        if (FD_ISSET(timerfd, &readset)) _timer_handler(timerfd);
+    }
+
+    TINY_LOG("timer done");
+
+    return NULL;
+}
+
 /*
  * 网络监控主程序
  */
@@ -174,16 +209,14 @@ static void* el_routine(void *arg)
         rv = select(maxfd + 1, &readset, NULL, NULL, &tv);
         //TINY_LOG("select return %d", rv);
 
-        if (rv == -1) {
+        if (rv == -1 && errno != EINTR) {
             TINY_LOG("select error %s", strerror(errno));
             break;
         } else if (rv == 0) continue;
 
         item = m_sources;
         while (item) {
-            if (item->pos == MNET_ONLINE_TIMER) {
-                if (FD_ISSET(item->contrl.base.fd, &readset)) _timer_handler(item->contrl.base.fd);
-            } else if (item->pos == MNET_ONLINE_LAN) {
+            if (item->pos == MNET_ONLINE_LAN) {
                 if (item->contrl.base.online && FD_ISSET(item->contrl.base.fd, &readset)) {
                     clientRecv(item->contrl.base.fd, &item->contrl);
                 }
@@ -195,6 +228,8 @@ static void* el_routine(void *arg)
             item = item->next;
         }
     }
+
+    TINY_LOG("el routine done");
 
     return NULL;
 }
@@ -220,44 +255,27 @@ bool mnetStart(const char *homedir)
     binaryInit();
     callbackStart();
 
-#define RETURN(ret)                             \
-    do {                                        \
-        free(item);                             \
-        return (ret);                           \
-    } while (0)
-
-    /* timer source */
-    MsourceNode *item = calloc(1, sizeof(MsourceNode));
-    memset(item, 0x0, sizeof(MsourceNode));
-    item->ip = NULL;
-    mdf_init(&item->dbnode);
-    item->contrl.base.fd = -1;
-    item->binary.base.fd = -1;
-    item->contrl.base.online = true;
-    item->pos = MNET_ONLINE_TIMER;
-
-    item->contrl.base.fd = timerfd_create(CLOCK_REALTIME, 0);
-    if (item->contrl.base.fd == -1) {
+    /* timer */
+    static int timerfd;
+    timerfd = timerfd_create(CLOCK_REALTIME, 0);
+    if (timerfd == -1) {
         TINY_LOG("create timer failure");
-        RETURN(false);
-    } else TINY_LOG("timer fd %d", item->contrl.base.fd);
+        return false;
+    }
 
     struct itimerspec new_value;
     new_value.it_value.tv_sec = 1;
     new_value.it_value.tv_nsec = 0;
     new_value.it_interval.tv_sec = 1;
     new_value.it_interval.tv_nsec = 0;
-    if (timerfd_settime(item->contrl.base.fd, 0, &new_value, NULL) == -1) {
+    if (timerfd_settime(timerfd, 0, &new_value, NULL) == -1) {
         TINY_LOG("set time failure");
-        RETURN(false);
+        return false;
     }
 
-    item->next = m_sources;
-    m_sources = item;
+    pthread_create(&m_timer, NULL, el_timer, &timerfd);
 
     pthread_create(&m_worker, NULL, el_routine, NULL);
-
-#undef RETURN
 
     return true;
 }
@@ -415,7 +433,7 @@ MsourceNode* _source_find(MsourceNode *nodes, char *id)
 
     MsourceNode *node = nodes;
     while (node) {
-        if (node->pos > MNET_ONLINE_TIMER && !strcmp(node->id, id)) return node;
+        if (node->pos > MNET_OFFLINE && !strcmp(node->id, id)) return node;
 
         node = node->next;
     }
@@ -896,6 +914,8 @@ static void _on_database_check(NetNode *client, bool success, char *errmsg, char
         item->binary.needToSync = item->binary.syncDone = 0;
 
         MLIST *synclist = mfileBuildSynclist(contrl->base.upnode);
+
+        TINY_LOG("SYNC LIST length %d", mlist_length(synclist));
 
         MDF *datanode;
         mdf_init(&datanode);
@@ -1654,22 +1674,30 @@ int main(int argc, char *argv[])
 
     sleep(5);
     //char *msg = msourceLibraryCreate("a4204428f3063", "测试媒体库2");
-    char *msg = msourceDirectoryInfo("a4204428f3063", "music/0701/");
-    if (msg) TINY_LOG("DIR %s", msg);
-    else TINY_LOG("list dir failure");
+    //char *msg = msourceDirectoryInfo("a4204428f3063", "music/0701/");
+    //if (msg) TINY_LOG("DIR %s", msg);
+    //else TINY_LOG("list dir failure");
 
     //mnetPlayInfo("a4204428f3063", _on_playing);
     //mnetPlay("a4204428f3063");
 
-    //sleep(5);
-    //mnetStoreList("a4204428f3063");
+    sleep(5);
+    mnetStoreList("a4204428f3063");
+
+    sleep(5);
+    //mnetStoreSync("a4204428f3063", "国语精选");
+    //omusicSyncStore("a4204428f3063", "国语精选");
+    omusicStoreSelect("a4204428f3063", "国语精选");
 
     //sleep(5);
-    //mnetStoreSync("a4204428f3063", "默认媒体库");
-    //omusicStoreSelect("a4204428f3063", "默认媒体库");
-
-    //sleep(5);
-    //TINY_LOG("home: %s", omusicHome("a4204428f3063"));
+    char *msg = omusicHome("a4204428f3063");
+    char *tok;
+    while ((tok = strstr(msg, "张学友,汤宝如")) != NULL) {
+        //msg = tok + strlen("张韶涵");
+        msg = tok + strlen("张学友,汤宝如");
+        TINY_LOG("token in");
+    }
+    TINY_LOG("home: %s", msg);
     //TINY_LOG("home: %s", omusicArtist("a4204428f3063", "U2"));
     //TINY_LOG("artist: %s", omusicAlbum("a4204428f3063", "U2", "Duals"));
 

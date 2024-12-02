@@ -16,7 +16,6 @@
 
 typedef enum {
     MNET_OFFLINE = 0,
-    MNET_ONLINE_TIMER,          /* 内部定时器使用 */
     MNET_ONLINE_LAN,
     MNET_ONLINE_WAN,
     MNET_ONLINE_MOC,
