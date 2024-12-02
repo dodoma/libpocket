@@ -150,6 +150,7 @@ static bool _parse_recv(BinNode *client, uint8_t *recvbuf, size_t recvlen)
                                             client->filename + strlen(mnetAppDir()) + LEN_CPUID);
                 //unlink(client->tempname);
             }
+            mos_free(client->bufrecv);
             return true;
         } else {
             /* 收到的内容比需要保存的文件内容多 */
@@ -279,7 +280,7 @@ void binaryRecv(int sfd, BinNode *client)
             return;
         }
 
-        if (!_parse_recv(client, client->bufrecv, client->recvlen)) {
+        if (!_parse_recv(client, client->bufrecv, client->recvlen + rv)) {
             TINY_LOG("packet error");
             return;
         }
