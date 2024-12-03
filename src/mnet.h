@@ -122,6 +122,8 @@ bool mnetOnReceiving(void (*callback)(char *id, char *name));
 bool mnetOnFileReceived(void (callback)(char *id, char *name));
 bool mnetOnReceiveDone(void (*callback)(char *id, int filecount));
 bool mnetOnUdiskMount(void (*callback)(char *id));
+bool mnetOnFree(void (*callback)(char *id));
+bool mnetOnBusyIndexing(void (*callback)(char *id));
 
 bool mnetSetShuffle(char *id, bool shuffle);
 bool mnetSetVolume(char *id, double volume);

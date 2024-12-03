@@ -141,6 +141,12 @@ static bool _parse_recv(CtlNode *client, uint8_t *recvbuf, size_t recvlen)
         case IDIOT_USTICK_MOUNT:
             callbackUdiskMounted(client->base.upnode->id);
             break;
+        case IDIOT_FREE:
+            callbackFree(client->base.upnode->id);
+            break;
+        case IDIOT_BUSY_INDEXING:
+            callbackBusyIndexing(client->base.upnode->id);
+            break;
         default:
             TINY_LOG("unsupport idot packet %d", ipacket->idiot);
             break;

@@ -10,12 +10,12 @@
 #include "server.h"
 #include "omusic.h"
 
-#define HEARTBEAT_PERIOD 2
-#define HEARTBEAT_TIMEOUT 6
-#define RECONNECT_TIMEOUT 3
+#define HEARTBEAT_PERIOD 5
+#define HEARTBEAT_TIMEOUT 20
+#define RECONNECT_TIMEOUT 5
 
-#define HEARTBEAT_PERIOD_BIN 60
-#define HEARTBEAT_TIMEOUT_BIN 180
+#define HEARTBEAT_PERIOD_BIN 120
+#define HEARTBEAT_TIMEOUT_BIN 600
 
 time_t g_ctime, g_starton, g_elapsed;
 
@@ -570,6 +570,24 @@ bool mnetOnUdiskMount(void (*callback)(char *id))
     if (!callback) return false;
 
     callbackSetUdiskMounted(callback);
+
+    return true;
+}
+
+bool mnetOnFree(void (*callback)(char *id))
+{
+    if (!callback) return false;
+
+    callbackSetFree(callback);
+
+    return true;
+}
+
+bool mnetOnBusyIndexing(void (*callback)(char *id))
+{
+    if (!callback) return false;
+
+    callbackSetBusyIndexing(callback);
 
     return true;
 }

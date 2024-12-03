@@ -15,6 +15,8 @@ static void (*_user_cbk_onreceiving)(char *id, char *fname) = NULL;
 static void (*_user_cbk_onfilereceived)(char *id, char *fname) = NULL;
 static void (*_user_cbk_onreceive_done)(char *id, int filecount) = NULL;
 static void (*_user_cbk_udisk_mounted)(char *id) = NULL;
+static void (*_user_cbk_free)(char *id) = NULL;
+static void (*_user_cbk_busy_indexing)(char *id) = NULL;
 
 static void* _do(void *arg)
 {
@@ -292,6 +294,16 @@ void callbackSetUdiskMounted(void (*callback)(char *id))
     _user_cbk_udisk_mounted = callback;
 }
 
+void callbackSetFree(void (*callback)(char *id))
+{
+    _user_cbk_free = callback;
+}
+
+void callbackSetBusyIndexing(void (*callback)(char *id))
+{
+    _user_cbk_busy_indexing = callback;
+}
+
 
 void callbackServerConnectted(char *id, CLIENT_TYPE type)
 {
@@ -318,6 +330,16 @@ void callbackOnReceiveDone(char *id, int filecount)
 void callbackUdiskMounted(char *id)
 {
     if (_user_cbk_udisk_mounted) _user_cbk_udisk_mounted(id);
+}
+
+void callbackFree(char *id)
+{
+    if (_user_cbk_free) _user_cbk_free(id);
+}
+
+void callbackBusyIndexing(char *id)
+{
+    if (_user_cbk_busy_indexing) _user_cbk_busy_indexing(id);
 }
 
 void callbackEntryFree(void *p)
