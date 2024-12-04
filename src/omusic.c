@@ -239,6 +239,80 @@ char* omusicHome(char *id)
     return output;
 }
 
+char* omusicSearch(char *id, char *query)
+{
+    if (!id || !query) return NULL;
+
+    OmusicNode *item = _makesure_load(id);
+    if (!item) {
+        TINY_LOG("%s store/path empty", id);
+        return NULL;
+    }
+
+    MRE *reo = mre_init();
+    MERR *err = mre_compile(reo, query);
+    if (err != MERR_OK) {
+        TINY_LOG("compile %s failure", query);
+        merr_destroy(&err);
+        return NULL;
+    }
+
+    MDF *outnode, *cnode = NULL;
+    mdf_init(&outnode);
+
+    DommeArtist *artist;
+    MLIST_ITERATE(item->plan->artists, artist) {
+        if (mre_match(reo, artist->name, true)) {
+            /* 匹配艺术家 */
+            cnode = mdf_insert_node(outnode, NULL, -1);
+            mdf_set_int_value(cnode, "type", 0);
+            mdf_set_value(cnode, "artist", artist->name);
+            mdf_set_valuef(cnode, "cover=%sassets/cover/%s", item->libroot, artist->name);
+        }
+
+        DommeAlbum *disk;
+        MLIST_ITERATEB(artist->albums, disk) {
+            if (mre_match(reo, disk->title, true)) {
+                /* 匹配专辑 */
+                cnode = mdf_insert_node(outnode, NULL, -1);
+                mdf_set_int_value(cnode, "type", 1);
+                mdf_set_value(cnode, "artist", artist->name);
+                mdf_set_value(cnode, "title", disk->title);
+                mdf_set_valuef(cnode, "cover=%s/assets/cover/%s_%s",
+                               item->libroot, artist->name, disk->title);
+            }
+
+            DommeFile *mfile;
+            MLIST_ITERATEC(disk->tracks, mfile) {
+                if (mre_match(reo, mfile->title, true)) {
+                    /* 匹配标题 */
+                    cnode = mdf_insert_node(outnode, NULL, -1);
+                    mdf_set_int_value(cnode, "type", 2);
+                    mdf_set_value(cnode, "trackid", mfile->id);
+                    mdf_set_value(cnode, "title", mfile->title);
+                    mdf_set_valuef(cnode, "cover=%sassets/cover/%s", item->libroot, mfile->id);
+                } else if (mre_match(reo, mfile->name, true)) {
+                    /* 匹配文件名 */
+                    cnode = mdf_insert_node(outnode, NULL, -1);
+                    mdf_set_int_value(cnode, "type", 3);
+                    mdf_set_value(cnode, "trackid", mfile->id);
+                    mdf_set_value(cnode, "title", mfile->name);
+                    mdf_set_valuef(cnode, "cover=%sassets/cover/%s", item->libroot, mfile->id);
+                }
+            }
+        }
+    }
+
+    mdf_object_2_array(outnode, NULL);
+
+    char *output = mdf_json_export_string(outnode);
+    mdf_destroy(&outnode);
+
+    mre_destroy(&reo);
+
+    return output;
+}
+
 char* omusicArtist(char *id, char *name)
 {
     if (!id || !name) return NULL;

@@ -24,6 +24,7 @@ OmusicNode* omusicStoreClear(char *id);
 /* 调用 omusicStoreSelect() 后调用，首次会花费稍长时间加载数据库 */
 char* omusicStoreList(char *id);
 char* omusicHome(char *id);
+char* omusicSearch(char *id, char *query);
 char* omusicArtist(char *id, char *name);
 char* omusicAlbum(char *id, char *name, char*title);
 
