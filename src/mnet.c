@@ -40,6 +40,20 @@ static bool _keep_heartbeat(void *data)
 
     //TINY_LOG("on keep heartbeat timeout");
 
+    /* 离线的 data 可能在切换页面时被释放掉，此处仅做粗略的判断，已防止 coredump */
+    bool memsafe = false;
+    MsourceNode *node = m_sources;
+    while (node) {
+        if (node == item) {
+            memsafe = true;
+            break;
+        }
+
+        node = node->next;
+    }
+
+    if (!memsafe) return false;
+
     uint8_t sendbuf[256] = {0};
     size_t sendlen = packetPINGFill(sendbuf, sizeof(sendbuf));
 
@@ -52,7 +66,15 @@ static bool _keep_heartbeat(void *data)
             TINY_LOG("reconnect to %s", item->id);
 
             contrl->base.pong = g_ctime;
+            if (!binary->base.online) {
+                binary->base.pong = g_ctime;
+                if (!serverConnect((NetNode*)&item->binary)) {
+                    TINY_LOG("binary lost, and connect failure");
+                    return true;
+                }
+            }
             if (serverConnect((NetNode*)&item->contrl)) {
+                item->pos = MNET_ONLINE_LAN;
                 uint8_t connbuf[LEN_IDIOT] = {0};
                 size_t connlen = packetIdiotFill(connbuf, IDIOT_CONNECT);
                 send(item->contrl.base.fd, connbuf, connlen, MSG_NOSIGNAL);
@@ -83,7 +105,7 @@ static bool _keep_heartbeat(void *data)
             TINY_LOG("reconnect to %s", item->id);
 
             binary->base.pong = g_ctime;
-            serverConnect((NetNode*)&item->binary);
+            if (serverConnect((NetNode*)&item->binary)) item->pos = MNET_ONLINE_LAN;
         }
     } else {
         if (g_ctime > binary->base.pong && g_ctime - binary->base.pong > HEARTBEAT_TIMEOUT_BIN) {
@@ -357,8 +379,40 @@ static bool _onbroadcast(char cpuid[LEN_CPUID], char ip[INET_ADDRSTRLEN],
 #undef RETURN
 }
 
+void msourceFree(MsourceNode *item)
+{
+    if (!item) return;
+
+    TINY_LOG("release offline node %s resources", item->id);
+
+    mos_free(item->ip);
+    mdf_destroy(&item->dbnode);
+    dommeStoreFree(item->plan);
+    mos_free(item);
+}
+
 char* mnetDiscovery()
 {
+    if (m_sources != NULL) {
+        /* 释放掉离线的音源，以防止自动重连 */
+        MsourceNode *item = m_sources, *next = NULL, *prev = NULL;
+        while (item) {
+            next = item->next;
+
+            if (!item->contrl.base.online) {
+                if (prev) prev->next = next;
+                else m_sources = next;
+
+                msourceFree(item);
+            } else prev = item;
+
+            item = next;
+        }
+
+        /* 暂时跟一个音源玩玩 */
+        if (m_sources) return m_sources->id;
+    }
+
     int fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (fd < 0) {
         TINY_LOG("create socket failure");
@@ -1598,6 +1652,55 @@ char* msourceLibraryMerge(char *id, char *libsrc, char *libdst)
 
     MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
     size_t sendlen = packetDataFill(packet, FRAME_HARDWARE, CMD_STORE_MERGE, datanode);
+    packet->seqnum = SEQ_SYNC_REQ;
+    packetCRCFill(packet);
+    SSEND(node->base.fd, node->bufsend, sendlen);
+
+    mdf_destroy(&datanode);
+
+    struct timespec timeout;
+    clock_gettime(CLOCK_REALTIME, &timeout);
+    timeout.tv_sec += 5;
+
+    pthread_mutex_lock(&node->lock);
+    while (!m_remotedone) {
+        rv = pthread_cond_timedwait(&node->cond, &node->lock, &timeout);
+        if (rv == ETIMEDOUT) {
+            pthread_mutex_unlock(&node->lock);
+
+            TINY_LOG("trigger sync timeout");
+            return "音源无响应";
+        }
+    }
+    pthread_mutex_unlock(&node->lock);
+
+    if (rv != 0) {
+        TINY_LOG("trigger sync nok %d %d %s", m_remotedone, rv, strerror(errno));
+        return "内部错误";
+    } else if (!m_remoteok) {
+        return m_recvbuf;
+    } else return NULL;
+}
+
+char* msourceSetAutoPlay(char *id, bool autoplay)
+{
+    int rv = 0;
+
+    if (!id) return "参数错误";
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return "音源离线";
+
+    CtlNode *node = &item->contrl;
+
+    m_remotedone = false;
+
+    MDF *datanode;
+    mdf_init(&datanode);
+    mdf_set_bool_value(datanode, "autoPlay", autoplay);
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetDataFill(packet, FRAME_HARDWARE, CMD_SET_AUTOPLAY, datanode);
     packet->seqnum = SEQ_SYNC_REQ;
     packetCRCFill(packet);
     SSEND(node->base.fd, node->bufsend, sendlen);

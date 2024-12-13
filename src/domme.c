@@ -105,6 +105,8 @@ void dommeStoreFree(void *p)
 {
     DommeStore *plan = (DommeStore*)p;
 
+    if (!plan) return;
+
     mos_free(plan->name);
     mos_free(plan->basedir);
 

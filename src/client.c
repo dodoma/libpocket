@@ -238,6 +238,7 @@ void serverClosed(CtlNode *client)
     TINY_LOG("server closed on %d", client->base.fd);
 
     client->base.online = false;
+    client->base.upnode->pos = MNET_OFFLINE;
 
     shutdown(client->base.fd, SHUT_RDWR);
     close(client->base.fd);
