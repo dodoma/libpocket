@@ -435,7 +435,7 @@ char* omusicLibraryID(char *id)
     if (!id) return NULL;
 
     char filename[PATH_MAX];
-    static char fileid[LEN_CPUID];
+    static char fileid[LEN_DOMMEID] = {0};
 
     OmusicNode *item = _makesure_load(id);
     if (!item) {
@@ -444,35 +444,41 @@ char* omusicLibraryID(char *id)
     }
 
     DommeStore *plan = item->plan;
-    if (plan->count_touched >= plan->count_track) return NULL;
 
-    int32_t pos = mos_rand(plan->count_track - plan->count_touched);
-    int32_t oldpos = pos;
-
-    char *key;
+    /* 剔除本地没有的音频文件，标记为已播放 */
+    char *key = NULL;
     DommeFile *dfile;
-    MHASH_ITERATE(plan->mfiles, key, dfile) {
-        if (!dfile->touched) {
+    if (fileid[0] == 0) {
+        MHASH_ITERATE(plan->mfiles, key, dfile) {
             snprintf(filename, sizeof(filename), "%s%s/%s%s%s",
                      mnetAppDir(), id, plan->basedir, dfile->dir, dfile->name);
-
-            if (_file_exist(filename)) {
-                strncpy(fileid, dfile->id, LEN_CPUID);
-                if (pos == 0) {
-                    dfile->touched = true;
-                    plan->count_touched++;
-                    return fileid;
-                }
-                pos--;
-            } else {
+            if (!_file_exist(filename)) {
                 dfile->touched = true;
                 plan->count_touched++;
             }
         }
     }
 
-    if (pos < oldpos) return fileid;
-    else return NULL;
+    if (plan->count_touched >= plan->count_track) return NULL;
+    int32_t pos = mos_rand(plan->count_track - plan->count_touched);
+
+    MHASH_ITERATE(plan->mfiles, key, dfile) {
+        if (!dfile->touched) {
+            snprintf(filename, sizeof(filename), "%s%s/%s%s%s",
+                     mnetAppDir(), id, plan->basedir, dfile->dir, dfile->name);
+            if (_file_exist(filename)) {
+                if (pos == 0) {
+                    strncpy(fileid, dfile->id, LEN_DOMMEID);
+                    dfile->touched = true;
+                    plan->count_touched++;
+                    return fileid;
+                }
+                pos--;
+            }
+        }
+    }
+
+    return NULL;
 }
 
 char* omusicArtistIDS(char *id, char *name)
