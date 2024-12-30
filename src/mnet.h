@@ -144,6 +144,7 @@ bool mnetStoreSync(char *id, char *storename);
 bool mnetStoreSyncMEDIA_ANYWAY(char *id, char *storename);
 bool mnetSyncTracks(char *id);
 bool mnetDeleteTrack(char *id, char *trackid);
+bool mnetCancelSync(char *id);
 
 /* 失败返回NULL，正常返回业务数据 */
 char* msourceHome(char *id);

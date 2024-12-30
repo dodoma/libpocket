@@ -1154,11 +1154,8 @@ bool mnetNTSCheck(void *arg)
 
     int filecount = mlist_length(synclist);
 
-    bool exist = false;
     char *id;
     MLIST_ITERATE(synclist, id) {
-        exist = false;
-
         /* 按理说 dommeGetFile 获取不到此id文件，加上以下判断只为逻辑更加严谨 */
         if (!memcmp(id, "STOREMARK", 9)) {
             mlist_delete(synclist, _moon_i);
@@ -1170,12 +1167,10 @@ bool mnetNTSCheck(void *arg)
         if (mfile) {
             snprintf(filename, sizeof(filename), "%s%s/%s%s%s",
                      m_appdir, item->id, plan->basedir, mfile->dir, mfile->name);
-            if (stat(filename, &fs) == 0) exist = true;
-        }
-
-        if (exist || !mfile) {
-            mlist_delete(synclist, _moon_i);
-            _moon_i--;
+            if (stat(filename, &fs) == 0) {
+                mlist_delete(synclist, _moon_i);
+                _moon_i--;
+            }
         }
     }
 
@@ -1323,6 +1318,33 @@ bool mnetDeleteTrack(char *id, char *trackid)
     SSEND(contrl->base.fd, contrl->bufsend, sendlen);
 
     mdf_destroy(&datanode);
+
+    return true;
+}
+
+bool mnetCancelSync(char *id)
+{
+    char filename[PATH_MAX];
+
+    if (!id) return false;
+
+    MsourceNode *item = _source_find(m_sources, id);
+    if (!item) return false;
+
+    snprintf(filename, sizeof(filename), "%s%s/setting/needToSync", m_appdir, item->id);
+
+    TINY_LOG("Cancel SYNC. remove %s", filename);
+
+    remove(filename);
+    callbackOnReceiveDone(item->id, 1);
+
+    CtlNode *node = &item->contrl;
+
+    MessagePacket *packet = packetMessageInit(node->bufsend, LEN_PACKET_NORMAL);
+    size_t sendlen = packetNODataFill(packet, FRAME_STORAGE, CMD_SYNC_CANCEL);
+    packetCRCFill(packet);
+
+    SSEND(node->base.fd, node->bufsend, sendlen);
 
     return true;
 }
@@ -1803,21 +1825,24 @@ int main(int argc, char *argv[])
     //mnetPlay("a4204428f3063");
 
     sleep(5);
-    mnetStoreList("a4204428f3063");
+    mnetStoreList("acb331f347a71");
 
     sleep(5);
-    //mnetStoreSync("a4204428f3063", "国语精选");
+    omusicStoreSelect("acb331f347a71", "默认媒体库");
     //omusicSyncStore("a4204428f3063", "国语精选");
-    omusicStoreSelect("a4204428f3063", "国语精选");
+    //omusicSyncStore("acb331f347a71", "默认媒体库");
 
-    //sleep(5);
-    char *msg = omusicHome("a4204428f3063");
-    char *tok;
-    while ((tok = strstr(msg, "张学友,汤宝如")) != NULL) {
+    sleep(5);
+    //mnetStoreSync("acb331f347a71", "默认媒体库");
+    char *msg = omusicLibraryID("acb331f347a71");
+    //char *msg = "";
+    //char *msg = omusicHome("a4204428f3063");
+    //char *tok;
+    //while ((tok = strstr(msg, "张学友,汤宝如")) != NULL) {
         //msg = tok + strlen("张韶涵");
-        msg = tok + strlen("张学友,汤宝如");
-        TINY_LOG("token in");
-    }
+   //     msg = tok + strlen("张学友,汤宝如");
+   //     TINY_LOG("token in");
+    //}
     TINY_LOG("home: %s", msg);
     //TINY_LOG("home: %s", omusicArtist("a4204428f3063", "U2"));
     //TINY_LOG("artist: %s", omusicAlbum("a4204428f3063", "U2", "Duals"));
