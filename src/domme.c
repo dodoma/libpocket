@@ -171,7 +171,7 @@ MERR* dommeLoadFromFile(char *filename, DommeStore *plan)
 
             MDF *song = mdf_get_child(artnode, "d");
             while (song) {
-                if (mdf_child_count(song, NULL) != 5) goto nextsong;
+                if (mdf_child_count(song, NULL) != 6) goto nextsong;
 
                 char *id = mdf_get_value(song, "[0]", NULL);
                 char *name = mdf_get_value(song, "[1]", NULL);
@@ -187,7 +187,8 @@ MERR* dommeLoadFromFile(char *filename, DommeStore *plan)
                 mfile->title = strdup(title);
 
                 mfile->sn = mdf_get_int_value(song, "[3]", 0);
-                mfile->length = mdf_get_int_value(song, "[4]", 0);
+                mfile->index = mdf_get_int_value(song, "[4]", 0);
+                mfile->length = mdf_get_int_value(song, "[5]", 0);
                 mfile->touched = false;
 
                 mfile->artist = artist;

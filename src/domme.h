@@ -26,7 +26,8 @@ typedef struct {
     char *title;
 
     uint8_t  sn;
-    uint32_t length;
+    int index;
+    int length;
 
     DommeAlbum  *disk;
     DommeArtist *artist;
