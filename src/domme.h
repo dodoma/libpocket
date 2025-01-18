@@ -59,4 +59,7 @@ DommeFile* dommeGetFile(DommeStore *plan, char *id);
 DommeArtist* artistFind(MLIST *artists, char *name);
 DommeAlbum* albumFind(MLIST *albums, char *title);
 
+uint32_t albumFreeTrack(DommeAlbum *disk);
+uint32_t artistFreeTrack(DommeArtist *artist);
+
 #endif  /* __DOMME_H__ */

@@ -460,23 +460,36 @@ char* omusicLibraryID(char *id)
     }
 
     if (plan->count_touched >= plan->count_track) return NULL;
-    int32_t pos = mos_rand(plan->count_track - plan->count_touched);
 
-    MHASH_ITERATE(plan->mfiles, key, dfile) {
-        if (!dfile->touched) {
-            snprintf(filename, sizeof(filename), "%s%s/%s%s%s",
-                     mnetAppDir(), id, plan->basedir, dfile->dir, dfile->name);
-            if (_file_exist(filename)) {
-                if (pos == 0) {
-                    strncpy(fileid, dfile->id, LEN_DOMMEID);
-                    dfile->touched = true;
-                    plan->count_touched++;
-                    return fileid;
+    int trycount = 0;
+    uint32_t pos = 0, freeCount = 0;
+    DommeArtist *artist;
+
+nextartist:
+    pos = mos_rand(mlist_length(plan->artists));
+    artist = mlist_getx(plan->artists, pos);
+    freeCount = artistFreeTrack(artist);
+    if (freeCount > 0) {
+        pos = mos_rand(freeCount);
+        DommeAlbum *disk;
+        MLIST_ITERATE(artist->albums, disk) {
+            MLIST_ITERATEB(disk->tracks, dfile) {
+                if (!dfile->touched) {
+                    snprintf(filename, sizeof(filename), "%s%s/%s%s%s",
+                             mnetAppDir(), id, plan->basedir, dfile->dir, dfile->name);
+                    if (_file_exist(filename)) {
+                        if (pos == 0) {
+                            strncpy(fileid, dfile->id, LEN_DOMMEID);
+                            dfile->touched = true;
+                            plan->count_touched++;
+                            return fileid;
+                        }
+                        pos--;
+                    }
                 }
-                pos--;
             }
         }
-    }
+    } else if (trycount++ < 10000) goto nextartist;
 
     return NULL;
 }

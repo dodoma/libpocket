@@ -255,3 +255,31 @@ DommeAlbum* albumFind(MLIST *albums, char *title)
 
     return NULL;
 }
+
+uint32_t albumFreeTrack(DommeAlbum *disk)
+{
+    if (!disk) return 0;
+
+    uint32_t count = 0;
+
+    DommeFile *mfile;
+    MLIST_ITERATE(disk->tracks, mfile) {
+        if (!mfile->touched) count++;
+    }
+
+    return count;
+}
+
+uint32_t artistFreeTrack(DommeArtist *artist)
+{
+    if (!artist) return 0;
+
+    uint32_t count = 0;
+
+    DommeAlbum *disk;
+    MLIST_ITERATE(artist->albums, disk) {
+        count += albumFreeTrack(disk);
+    }
+
+    return count;
+}
